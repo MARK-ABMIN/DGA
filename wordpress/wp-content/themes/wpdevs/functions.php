@@ -38,7 +38,7 @@ add_action('after_setup_theme', 'wpdevs_setup');
 
 
 
-// install elementor
+// install elementor pro
 
 
 if (!defined('ABSPATH')) exit;

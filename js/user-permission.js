@@ -12,9 +12,15 @@ jQuery(document).ready(function($) {
             $(document).on('click', '.user-permission-icon', this.toggleSettingsPanel);
             $('body').on('click', '#user-permission-save', this.savePermissions);
             $('body').on('click', '#user-permission-login-btn', this.showLoginForm);
+            $('body').on('click', '#user-permission-home-btn', this.redirectToHome);  // เพิ่ม event สำหรับปุ่มกลับหน้าหลัก
             $('body').on('submit', '#user-permission-login', this.handleLogin);
             $('body').on('click', '.user-permission-close', this.closePanel);
             $('body').on('click', '.cancel-btn', this.cancelLogin);
+            
+            // ป้องกันการ scroll เมื่อมี overlay
+            if ($('.user-permission-overlay').length > 0) {
+                $('body').addClass('no-scroll');
+            }
         },
 
         toggleSettingsPanel: function(e) {
@@ -202,6 +208,7 @@ jQuery(document).ready(function($) {
                     if (response.success && response.data && response.data.allowed) {
                         $('.protected-content').fadeIn();
                         $('.user-permission-overlay').remove();
+                        $('body').removeClass('no-scroll');
                     } else {
                         this.showBlurOverlay();
                     }
@@ -213,19 +220,48 @@ jQuery(document).ready(function($) {
         },
 
         showBlurOverlay: function() {
-            if ($('.user-permission-overlay').length) return;
+            if ($('.user-permission-overlay').length) {
+                $('body').addClass('no-scroll'); // ล็อค scroll
+                return;
+            }
 
             const overlay = `
                 <div class="user-permission-overlay">
-                    <div class="user-permission-message">
-                        <h2>หน้านี้ถูกจำกัดการเข้าถึง</h2>
-                        <p>กรุณาลงชื่อเข้าใช้ด้วยบัญชีที่มีสิทธิ์</p>
-                        <button id="user-permission-login-btn" class="user-permission-login-btn">ลงชื่อเข้าใช้</button>
+                    <div class="user-permission-modal">
+                        <div class="modal-header">
+                            <div class="lock-icon">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+                                    <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+                                </svg>
+                            </div>
+                        </div>
+                        <div class="user-permission-message">
+                            <h2>การเข้าถึงถูกจำกัด</h2>
+                            <p>หน้านี้ต้องการสิทธิ์พิเศษในการเข้าถึง</p>
+                            <div class="button-group">
+                                <button id="user-permission-login-btn" class="user-permission-login-btn">
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                        <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"></path>
+                                        <polyline points="10 17 15 12 10 7"></polyline>
+                                        <line x1="15" y1="12" x2="3" y2="12"></line>
+                                    </svg>
+                                    ลงชื่อเข้าใช้
+                                </button>
+                                <button id="user-permission-home-btn" class="user-permission-home-btn">
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                        <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path>
+                                        <polyline points="9 22 9 12 15 12 15 22"></polyline>
+                                    </svg>
+                                    กลับสู่หน้าหลัก
+                                </button>
+                            </div>
+                        </div>
                     </div>
                 </div>
             `;
             
-            $('body').append(overlay);
+            $('body').append(overlay).addClass('no-scroll'); // ล็อค scroll
         },
 
         showLoginForm: function() {
@@ -239,7 +275,7 @@ jQuery(document).ready(function($) {
                         <div class="form-group">
                             <input type="password" name="password" placeholder="รหัสผ่าน" required>
                         </div>
-                        <div class="button-group">
+                        <div class="button-group vertical">
                             <button type="submit" class="login-btn">เข้าสู่ระบบ</button>
                             <button type="button" class="cancel-btn">ยกเลิก</button>
                         </div>
@@ -247,15 +283,45 @@ jQuery(document).ready(function($) {
                 </div>
             `;
             
-            $('.user-permission-message').html(loginForm);
+            $('.user-permission-modal').html(loginForm);
         },
 
         cancelLogin: function() {
-            $('.user-permission-message').html(`
-                <h2>หน้านี้ถูกจำกัดการเข้าถึง</h2>
-                <p>กรุณาลงชื่อเข้าใช้ด้วยบัญชีที่มีสิทธิ์</p>
-                <button id="user-permission-login-btn" class="user-permission-login-btn">ลงชื่อเข้าใช้</button>
+            $('.user-permission-modal').html(`
+                <div class="modal-header">
+                    <div class="lock-icon">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+                            <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+                        </svg>
+                    </div>
+                </div>
+                <div class="user-permission-message">
+                    <h2>การเข้าถึงถูกจำกัด</h2>
+                    <p>หน้านี้ต้องการสิทธิ์พิเศษในการเข้าถึง</p>
+                    <div class="button-group">
+                        <button id="user-permission-login-btn" class="user-permission-login-btn">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"></path>
+                                <polyline points="10 17 15 12 10 7"></polyline>
+                                <line x1="15" y1="12" x2="3" y2="12"></line>
+                            </svg>
+                            ลงชื่อเข้าใช้
+                        </button>
+                        <button id="user-permission-home-btn" class="user-permission-home-btn">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path>
+                                <polyline points="9 22 9 12 15 12 15 22"></polyline>
+                            </svg>
+                            กลับสู่หน้าหลัก
+                        </button>
+                    </div>
+                </div>
             `);
+        },
+
+        redirectToHome: function() {
+            window.location.href = userPermissionAjax.homeUrl;
         },
 
         handleLogin: function(e) {

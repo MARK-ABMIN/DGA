@@ -66,6 +66,7 @@
   max-width: 800px;
   margin: 2rem auto;
   padding: 0 1rem;
+  --form-prefix: true;
 }
 
 /* ===== แบบฟอร์ม ===== */
@@ -75,6 +76,15 @@
   box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
   padding: 2rem;
   margin-bottom: 2rem;
+}
+
+.complaint-form-container .loading,
+.complaint-form-container .field-hint,
+.complaint-form-container .error-message,
+.complaint-form-container .message,
+.complaint-form-container .form-group {
+  /* ให้แน่ใจว่า CSS เหล่านี้ใช้เฉพาะกับฟอร์ม */
+  font-family: inherit;
 }
 
 .complaint-form h2 {

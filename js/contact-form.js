@@ -1,4 +1,4 @@
-// Save this as contact-form.js in your child theme's js folder
+// แก้ไข JavaScript สำหรับแบบฟอร์ม
 
 jQuery(document).ready(function($) {
     const form = $('#department-contact-form');
@@ -14,12 +14,8 @@ jQuery(document).ready(function($) {
 
     // Show toast notification function
     function showToast(message, type = 'success', duration = 3000) {
-        const icon = type === 'success' 
-            ? '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="icon"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>'
-            : '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="icon"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>';
-        
         toastContainer
-            .html(icon + '<span>' + message + '</span>')
+            .html('<span>' + message + '</span>')
             .css({
                 'display': 'flex',
                 'background-color': type === 'success' ? 'var(--color-success)' : 'var(--color-error)'

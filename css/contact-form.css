@@ -1,4 +1,4 @@
-/* Save this as contact-form.css in your child theme's css folder */
+/* ปรับแต่ง CSS สำหรับแบบฟอร์ม */
 
 :root {
     --color-primary: #F15A22;
@@ -9,9 +9,9 @@
     --color-text-light: #666666;
     --color-error: #dc3545;
     --color-success: #28a745;
-    --color-border: #E5E7EB;
+    --color-border: #cccccc; /* ปรับสีเส้นขอบให้เข้มขึ้น */
     --color-background: #FFFFFF;
-    --color-background-light: #F9FAFB;
+    --color-background-light: #f2f2f2; /* ปรับสีพื้นหลังให้เข้มขึ้น */
     --transition: all 0.3s ease;
 }
 
@@ -40,7 +40,7 @@
 
 .form-group {
     position: relative;
-    margin-bottom: 0;
+    margin-bottom: 1rem; /* เพิ่มระยะห่างระหว่างฟิลด์ */
 }
 
 .form-label {
@@ -49,21 +49,18 @@
     gap: 0.25rem;
     color: var(--color-text);
     font-size: 0.925rem;
-    margin-bottom: 0.25rem;
+    margin-bottom: 0.35rem; /* เพิ่มระยะห่างระหว่างป้ายกำกับและฟิลด์ */
+    font-weight: 500; /* เพิ่มความหนาของตัวอักษร */
 }
 
 .required-asterisk {
     color: var(--color-primary);
 }
 
-.input-wrapper {
-    position: relative;
-}
-
 .form-control {
     width: 100%;
-    padding: 0.625rem 2.5rem;
-    border: 1.5px solid var(--color-border);
+    padding: 0.75rem 1rem; /* ปรับ padding ให้เหมาะสมหลังจากนำไอคอนออก */
+    border: 2px solid var(--color-border); /* เพิ่มความหนาของเส้นขอบ */
     border-radius: 0.5rem;
     font-size: 0.95rem;
     transition: var(--transition);
@@ -74,33 +71,17 @@
 .form-control:focus {
     outline: none;
     border-color: var(--color-secondary);
-    box-shadow: 0 0 0 3px rgba(0, 45, 116, 0.1);
+    box-shadow: 0 0 0 3px rgba(0, 45, 116, 0.15); /* เพิ่มความชัดเจนของ focus state */
 }
 
 .form-control:hover:not(:focus) {
     border-color: var(--color-secondary-light);
 }
 
-.input-icon {
-    position: absolute;
-    left: 0.75rem;
-    top: 50%;
-    transform: translateY(-50%);
-    color: var(--color-text-light);
-    display: flex;
-    align-items: center;
-    pointer-events: none;
-}
-
-.input-icon .icon {
-    width: 1.1rem;
-    height: 1.1rem;
-}
-
 textarea.form-control {
-    min-height: 100px;
+    min-height: 120px; /* เพิ่มความสูงขั้นต่ำของพื้นที่ข้อความ */
     resize: vertical;
-    padding: 0.625rem 1rem;
+    padding: 0.75rem 1rem;
 }
 
 .error-message {
@@ -125,7 +106,7 @@ textarea.form-control {
 }
 
 .form-submit {
-    margin-top: 0.75rem;
+    margin-top: 1rem; /* เพิ่มระยะห่างก่อนปุ่ม */
     display: flex;
     justify-content: flex-end;
 }
@@ -134,10 +115,10 @@ textarea.form-control {
     position: relative;
     display: inline-flex;
     align-items: center;
-    gap: 0.5rem;
+    justify-content: center; /* จัดตำแหน่งข้อความตรงกลาง */
     background: linear-gradient(135deg, var(--color-primary) 0%, var(--color-primary-dark) 100%);
     color: white;
-    padding: 0.75rem 2rem;
+    padding: 0.75rem 2.5rem; /* ปรับ padding ให้เหมาะสม */
     border: none;
     border-radius: 0.5rem;
     font-size: 0.95rem;
@@ -174,17 +155,6 @@ textarea.form-control {
 
 .submit-button:active {
     transform: translateY(0);
-}
-
-.button-icon {
-    display: flex;
-    align-items: center;
-}
-
-.button-icon .icon {
-    width: 1.1rem;
-    height: 1.1rem;
-    stroke-width: 2.5;
 }
 
 /* Loading Overlay */
@@ -225,7 +195,7 @@ textarea.form-control {
     right: 1.5rem;
     background: linear-gradient(135deg, var(--color-success) 0%, #1f8f3a 100%);
     color: white;
-    padding: 0.75rem 1.25rem;
+    padding: 1rem 1.5rem; /* ปรับ padding ให้เหมาะสม */
     border-radius: 0.5rem;
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
     display: flex;
@@ -234,11 +204,6 @@ textarea.form-control {
     z-index: 1000;
     animation: slideIn 0.3s ease-out;
     font-size: 0.9rem;
-}
-
-.toast-notification .icon {
-    width: 1.1rem;
-    height: 1.1rem;
 }
 
 /* Animations */

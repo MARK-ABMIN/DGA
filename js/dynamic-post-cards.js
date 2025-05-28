@@ -28,13 +28,8 @@
                 isLoading: false,
                 search: '',
                 year: '',
-                searchTimer: null,
-                selectedPostId: null, // ใช้เก็บ ID ของโพสต์ที่เลือกจาก autocomplete
-                filterField: '' // เพิ่มตัวแปรสำหรับเก็บสถานะการกรองตาม custom field
+                searchTimer: null
             };
-            
-            // ตั้งค่า Autocomplete
-            setupAutocomplete();
             
             // เพิ่มปุ่มเฟืองสำหรับมือถือ
             setupMobileFilterToggle();
@@ -44,6 +39,22 @@
             
             // ตั้งค่า event listeners
             setupEventListeners();
+            
+            // ฟังก์ชันตัดข้อความให้ไม่เกิน 95 ตัวอักษร
+            function truncateText(text, maxLength = 95) {
+                if (text.length <= maxLength) return text;
+                
+                // ตัดข้อความที่ตำแหน่ง maxLength
+                let truncated = text.substr(0, maxLength);
+                
+                // หาตำแหน่งช่องว่างสุดท้ายเพื่อไม่ให้ตัดกลางคำ
+                const lastSpaceIndex = truncated.lastIndexOf(' ');
+                if (lastSpaceIndex > 0) {
+                    truncated = truncated.substr(0, lastSpaceIndex);
+                }
+                
+                return truncated + '...';
+            }
             
             // ฟังก์ชันตั้งค่า Mobile Filter Toggle
             function setupMobileFilterToggle() {
@@ -67,85 +78,6 @@
                         !$(event.target).closest('.mobile-filter-toggle', container).length) {
                         container.find('.filter-controls').removeClass('active');
                     }
-                });
-            }
-            
-            // ฟังก์ชันตั้งค่า Autocomplete
-            function setupAutocomplete() {
-                const searchInput = container.find('.autocomplete-search');
-                
-                searchInput.autocomplete({
-                    source: function(request, response) {
-                        $.ajax({
-                            url: dynamic_post_cards_params.ajax_url,
-                            dataType: "json",
-                            data: {
-                                action: 'dynamic_post_cards_autocomplete',
-                                nonce: dynamic_post_cards_params.nonce,
-                                term: request.term,
-                                post_type: state.postType // ส่ง post_type จาก state ไปด้วย
-                            },
-                            success: function(data) {
-                                response(data);
-                            }
-                        });
-                    },
-                    minLength: 2,
-                    select: function(event, ui) {
-                        // เมื่อเลือกรายการจาก autocomplete
-                        event.preventDefault();
-                        
-                        // ตั้งค่าค่าใน input
-                        $(this).val(ui.item.value);
-                        
-                        // เก็บ ID ของโพสต์ที่เลือกเพื่อใช้ในการค้นหา
-                        if (ui.item.type === 'custom_field') {
-                            // ถ้าเลือกจาก custom field ใช้ ID ของโพสต์
-                            state.selectedPostId = ui.item.id;
-                            state.search = ui.item.id.toString();
-                        } else {
-                            // ถ้าเลือกจากชื่อเรื่อง ใช้ชื่อเรื่องในการค้นหา
-                            state.selectedPostId = null;
-                            state.search = ui.item.value;
-                        }
-                        
-                        // ยกเลิกการกรองตาม custom field
-                        state.filterField = '';
-                        container.find('.filter-badge').removeClass('active');
-                        
-                        // รีเซ็ตหน้าแล้วโหลดข้อมูลใหม่
-                        state.paged = 1;
-                        loadPosts();
-                        
-                        return false;
-                    },
-                    // แก้ไขปัญหาการแสดงผล dropdown ด้วยการกำหนด position และ z-index
-                    position: {
-                        my: "left top+5",
-                        at: "left bottom",
-                        collision: "flip"
-                    },
-                    // จำกัดการแสดงผลให้อยู่ภายใน container ของเรา
-                    appendTo: container
-                }).autocomplete("instance")._renderItem = function(ul, item) {
-                    // แสดงผล item ใน dropdown
-                    let itemClass = "ui-menu-item-wrapper";
-                    let itemContent = item.label;
-                    
-                    // เพิ่ม badge ถ้าเป็น custom field
-                    if (item.type === 'custom_field') {
-                        const badgeClass = item.meta_key === 'at_docnum_1' ? 'orange-badge-mini' : 'gold-badge-mini';
-                        itemClass += " has-badge " + badgeClass;
-                    }
-                    
-                    return $("<li>")
-                        .append("<div class='" + itemClass + "'>" + itemContent + "</div>")
-                        .appendTo(ul);
-                };
-                
-                // เพิ่มคลาสให้กับ autocomplete dropdown
-                $(document).on('autocompleteopen', function() {
-                    $('.ui-autocomplete').addClass('dynamic-post-cards-autocomplete');
                 });
             }
             
@@ -182,43 +114,9 @@
                     loadPosts();
                 });
                 
-                // การคลิกที่ Badge กรอง
-                container.find('.filter-badge').on('click', function() {
-                    const field = $(this).data('field');
-                    
-                    // ถ้าคลิกที่ Badge ที่กำลังใช้อยู่ ให้ยกเลิกการกรอง
-                    if (state.filterField === field) {
-                        state.filterField = '';
-                        $(this).removeClass('active');
-                    } else {
-                        state.filterField = field;
-                        container.find('.filter-badge').removeClass('active');
-                        $(this).addClass('active');
-                    }
-                    
-                    // ล้างการค้นหา
-                    if (state.search !== '') {
-                        state.search = '';
-                        container.find('.search-input').val('');
-                    }
-                    
-                    // รีเซ็ตหน้าและค้นหาใหม่
-                    state.paged = 1;
-                    loadPosts();
-                });
-                
                 // การค้นหา (กำหนด debounce เพื่อไม่ให้ส่ง request มากเกินไป)
                 container.find('.search-input').on('input', function() {
-                    // ล้างค่า selectedPostId เมื่อมีการพิมพ์ค้นหาใหม่
-                    state.selectedPostId = null;
-                    
                     const searchTerm = $(this).val().trim();
-                    
-                    // ล้างการกรอง Badge ถ้ามีการพิมพ์ค้นหา
-                    if (searchTerm !== '' && state.filterField !== '') {
-                        state.filterField = '';
-                        container.find('.filter-badge').removeClass('active');
-                    }
                     
                     // ยกเลิก timer เดิม
                     if (state.searchTimer) {
@@ -287,8 +185,7 @@
                         orderby: state.orderby,
                         order: state.order,
                         search: state.search,
-                        year: state.year,
-                        filter_field: state.filterField // ส่งค่า filter_field ไปด้วย
+                        year: state.year
                     },
                     success: function(response) {
                         if (response.success) {
@@ -375,6 +272,9 @@
                         badgeHtml = `<div class="doc-badge orange-badge">เลขที่ มสพร. ${post.at_docnum_1}</div>`;
                     }
                     
+                    // ตัดข้อความ title ให้ไม่เกิน 95 ตัวอักษร
+                    const truncatedTitle = truncateText(post.title, 95);
+                    
                     if (state.view === 'card') {
                         postHtml = `
                             <div class="card-item">
@@ -382,7 +282,17 @@
                                     <img ${imgAttributes} class="card-image">
                                     ${badgeHtml}
                                 </a>
-                                <!-- โค้ดที่เหลือเหมือนเดิม -->
+                                <div class="card-meta">
+                                    <span class="post-date">${post.date}</span>
+                                    <span class="visitor-count">${post.visitor_count}</span>
+                                </div>
+                                <h3 class="card-title" title="${post.title}">
+                                    <a href="${post.permalink}">${truncatedTitle}</a>
+                                </h3>
+                                <div class="card-excerpt">${post.excerpt}</div>
+                                <div class="card-footer">
+                                    <a href="${post.permalink}" class="read-more-btn">อ่านต่อ</a>
+                                </div>
                             </div>
                         `;
                     } else {
@@ -394,7 +304,7 @@
                                 </a>
                                 <div class="list-content">
                                     <h3 class="list-title" title="${post.title}">
-                                        <a href="${post.permalink}">${post.title}</a>
+                                        <a href="${post.permalink}">${truncatedTitle}</a>
                                     </h3>
                                     <div class="list-meta">
                                         <span class="post-date">${post.date}</span>

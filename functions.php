@@ -16,6 +16,397 @@ if ( ! defined( 'ABSPATH' ) ) {
 
 define( 'HELLO_ELEMENTOR_CHILD_VERSION', '2.0.0' );
 
+/***** ฟังก์ชั่นซ่อนเมนูบาร์ *****/
+
+function dga_hide_menubar() {
+    // ตรวจสอบว่าผู้ใช้ไม่ใช่ subscriber และเข้าสู่ระบบแล้ว
+    if (!is_user_logged_in() || current_user_can('subscriber')) {
+        return;
+    }
+    
+    // Enqueue CSS
+    wp_enqueue_style(
+        'dga-hide-menubar-css',
+        get_stylesheet_directory_uri() . '/css/dga-hide_menubar.css',
+        array(),
+        '1.0.0'
+    );
+    
+    // Enqueue JavaScript
+    wp_enqueue_script(
+        'dga-hide-menubar-js',
+        get_stylesheet_directory_uri() . '/js/dga-hide_menubar.js',
+        array('jquery'),
+        '1.0.0',
+        true
+    );
+    
+    // ส่งข้อมูลไปยัง JavaScript (ถ้าจำเป็น)
+    wp_localize_script('dga-hide-menubar-js', 'dga_menubar_params', array(
+        'ajax_url' => admin_url('admin-ajax.php'),
+        'nonce' => wp_create_nonce('dga_menubar_nonce'),
+        'tab_text' => __('Admin menu', 'dga-hide-menubar'),
+        'tab_position' => 'left', // เปลี่ยนเป็น 'right' ถ้าต้องการให้อยู่ขวา
+        'tab_style' => 'rounded' // style ของปุ่ม: 'rounded', 'square', 'pill'
+    ));
+}
+add_action('wp_enqueue_scripts', 'dga_hide_menubar');
+
+// ป้องกันไม่ให้ซ่อน menu bar ทันทีสำหรับ subscribers
+function dga_disable_menubar_for_subscribers() {
+    if (current_user_can('subscriber')) {
+        show_admin_bar(false);
+    }
+}
+add_action('after_setup_theme', 'dga_disable_menubar_for_subscribers');
+
+// เพิ่ม CSS class เพื่อให้ JavaScript ทำงานได้ถูกต้อง
+function dga_add_body_class($classes) {
+    if (is_user_logged_in() && !current_user_can('subscriber')) {
+        $classes[] = 'dga-menubar-enabled';
+    }
+    return $classes;
+}
+add_filter('body_class', 'dga_add_body_class');
+
+
+/***** DGA ADMIN LOGIN **********/
+
+// ฟังก์ชันหลักสำหรับการปรับแต่งหน้า Login
+function dga_login2_admin() {
+    // เพิ่ม CSS และ JavaScript
+    add_action('login_enqueue_scripts', 'dga_login2_admin_styles');
+    
+    // เปลี่ยน URL ของโลโก้
+    add_filter('login_headerurl', 'dga_login2_admin_logo_url');
+    
+    // เปลี่ยนข้อความ Title ของโลโก้
+    add_filter('login_headertext', 'dga_login2_admin_logo_title');
+    
+    // ปรับแต่ง HTML ของฟอร์ม Login
+    add_action('login_form', 'dga_login2_admin_form_additions');
+    
+    // เพิ่ม AJAX endpoints
+    add_action('wp_ajax_nopriv_dga_ajax_login', 'dga_ajax_login_callback');
+    
+    // ลบตัวเลือกเปลี่ยนภาษา
+    dga_remove_language_switcher();
+    
+    // ลบลิงก์ลงทะเบียน ลืมรหัสผ่าน และอื่นๆ (เพิ่มใหม่)
+    dga_remove_login_links();
+}
+add_action('init', 'dga_login2_admin');
+
+// ฟังก์ชันสำหรับการเพิ่ม CSS และ JavaScript
+function dga_login2_admin_styles() {
+    $theme_directory = get_stylesheet_directory_uri();
+    
+    // เพิ่ม CSS
+    wp_enqueue_style('dga-login2-admin-style', $theme_directory . '/css/dga-login2-admin.css', array(), '1.0.0');
+    
+    // เพิ่ม JavaScript
+    wp_enqueue_script('dga-login2-admin-script', $theme_directory . '/js/dga-login2-admin.js', array('jquery'), '1.0.0', true);
+    
+    // ส่งข้อมูลไปยัง JavaScript
+    wp_localize_script('dga-login2-admin-script', 'dga_login_params', array(
+        'ajax_url' => admin_url('admin-ajax.php'),
+        'login_nonce' => wp_create_nonce('dga-login-nonce'),
+        'redirect_url' => admin_url(),
+        'loading_text' => __('กำลังเข้าสู่ระบบ...', 'dga'),
+    ));
+    
+    // เพิ่ม CSS แบบ inline เพื่อซ่อนตัวเลือกภาษา
+    wp_add_inline_style('dga-login2-admin-style', '
+        /* ซ่อนทุกอิลิเมนต์ที่เกี่ยวข้องกับการเปลี่ยนภาษา */
+        .language-switcher,
+        #language-switcher,
+        #language-switcher-locales-wrapper,
+        .login-language-switcher,
+        .login-form-language-switcher-container,
+        .language-switcher-container,
+        select[name="wp_lang"],
+        select[name="language"],
+        div[class*="language-switcher"],
+        div[id*="language-switcher"],
+        .login-footer-languages,
+        #login-language-switcher,
+        #login-footer-languages,
+        .language-switcher-links,
+        div:has(select[name="language"]),
+        div:has(select[id*="language"]),
+        a:contains("เปลี่ยนภาษา"),
+        .login > form + div,
+        .login > #loginform + div,
+        .login-footer-local,
+        .login-header-language,
+        [id*="language"],
+        [class*="language"],
+        [name*="language"],
+        [id*="lang-"],
+        [class*="lang-"],
+        [id*="lang_"],
+        [class*="lang_"] {
+            display: none !important;
+            visibility: hidden !important;
+        }
+    ');
+}
+
+// ฟังก์ชันสำหรับการเปลี่ยน URL ของโลโก้
+function dga_login2_admin_logo_url() {
+    return home_url();
+}
+
+// ฟังก์ชันสำหรับการเปลี่ยนข้อความ Title ของโลโก้
+function dga_login2_admin_logo_title() {
+    return get_bloginfo('name');
+}
+
+// ฟังก์ชันสำหรับการเพิ่มเนื้อหาเข้าไปในฟอร์ม Login
+function dga_login2_admin_form_additions() {
+    echo '<div class="dga-login-response"></div>';
+    echo '<input type="hidden" name="dga_login_nonce" value="' . wp_create_nonce('dga-login-nonce') . '">';
+}
+
+// ฟังก์ชัน AJAX Callback
+function dga_ajax_login_callback() {
+    // ตรวจสอบ Nonce
+    check_ajax_referer('dga-login-nonce', 'security');
+    
+    // รับข้อมูลจากฟอร์ม
+    $username = isset($_POST['username']) ? sanitize_user($_POST['username']) : '';
+    $password = isset($_POST['password']) ? $_POST['password'] : '';
+    $remember = isset($_POST['remember']) ? true : false;
+    
+    // ตรวจสอบการเข้าสู่ระบบ
+    $user = wp_signon(array(
+        'user_login' => $username,
+        'user_password' => $password,
+        'remember' => $remember
+    ), is_ssl());
+    
+    // ตรวจสอบว่าเข้าสู่ระบบสำเร็จหรือไม่
+    if (is_wp_error($user)) {
+        wp_send_json_error(array(
+            'message' => $user->get_error_message()
+        ));
+    } else {
+        wp_send_json_success(array(
+            'message' => __('เข้าสู่ระบบสำเร็จ กำลังเปลี่ยนเส้นทาง...', 'dga'),
+            'redirect' => admin_url()
+        ));
+    }
+}
+
+/**
+ * ฟังก์ชันสำหรับลบตัวเลือกเปลี่ยนภาษาออกจากหน้า Login อย่างสมบูรณ์
+ */
+function dga_remove_language_switcher() {
+    // ลบตัวเลือกภาษาด้วย filter
+    add_filter('login_display_language_dropdown', '__return_false', 9999);
+    add_filter('login_form_language_dropdown', '__return_false', 9999);
+    
+    // ลบทุก action ที่เกี่ยวข้องกับ language switcher
+    if (has_action('login_form', 'wp_login_language_switcher')) {
+        remove_action('login_form', 'wp_login_language_switcher');
+    }
+    
+    // ใส่ JavaScript เพื่อซ่อนตัวเลือกภาษาที่อาจจะไม่ถูกซ่อนด้วย CSS
+    add_action('login_footer', 'dga_language_switcher_remove_js', 9999);
+    
+    // ใช้ output buffering เพื่อลบ HTML ของตัวเลือกภาษา
+    add_action('login_init', 'dga_remove_language_switcher_ob', 1);
+}
+
+/**
+ * ฟังก์ชันสำหรับลบลิงก์ลงทะเบียน ลืมรหัสผ่าน และอื่นๆ (เพิ่มใหม่)
+ */
+function dga_remove_login_links() {
+    // ลบลิงก์ลงทะเบียนและลืมรหัสผ่าน
+    add_filter('login_display_password_reset_link', '__return_false');
+    add_filter('login_display_register_link', '__return_false');
+    
+    // ลบลิงก์ Privacy Policy
+    add_filter('the_privacy_policy_link', '__return_empty_string');
+    
+    // ลบใน footer
+    add_action('login_footer', 'dga_remove_login_links_js', 9999);
+    
+    // ลบออกด้วย output buffer
+    add_action('login_init', 'dga_remove_login_links_ob', 2);
+}
+
+/**
+ * ฟังก์ชันสำหรับเพิ่ม JavaScript เพื่อซ่อนตัวเลือกภาษา
+ */
+function dga_language_switcher_remove_js() {
+    ?>
+    <script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // รายการ selector ที่ต้องการลบ
+        const elementsToRemove = [
+            '.language-switcher',
+            '#language-switcher',
+            '.login-language-switcher',
+            '.login-footer-languages',
+            'select[name="wp_lang"]',
+            'select[name="language"]',
+            '[id*="language"]',
+            '[class*="language"]',
+            'a:contains("เปลี่ยนภาษา")',
+            'form + div select',
+            '.login-footer-local',
+            '.login-header-language'
+        ];
+        
+        // ลบทุกอิลิเมนต์ที่ตรงกับ selector
+        elementsToRemove.forEach(function(selector) {
+            try {
+                document.querySelectorAll(selector).forEach(function(el) {
+                    if (el && el.parentNode) {
+                        el.parentNode.removeChild(el);
+                    }
+                });
+            } catch (e) {
+                // ดักจับข้อผิดพลาดหากมี
+            }
+        });
+    });
+    </script>
+    <?php
+}
+
+/**
+ * ฟังก์ชันสำหรับเพิ่ม JavaScript เพื่อซ่อนลิงก์ (เพิ่มใหม่)
+ */
+function dga_remove_login_links_js() {
+    ?>
+    <script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // รายการ selector ที่ต้องการลบ
+        const elementsToRemove = [
+            '#nav',
+            '#backtoblog',
+            'p#nav',
+            'p#backtoblog',
+            '.privacy-policy-page-link',
+            'a[href*="wp-login.php?action=register"]',
+            'a[href*="wp-login.php?action=lostpassword"]',
+            'a[href*="wp-login.php?action=rp"]',
+            '.login-footer',
+            '#login-footer',
+            '#login + p',
+            '#login ~ p'
+        ];
+        
+        // ลบทุกอิลิเมนต์ที่ตรงกับ selector
+        elementsToRemove.forEach(function(selector) {
+            try {
+                document.querySelectorAll(selector).forEach(function(el) {
+                    if (el && el.parentNode) {
+                        el.parentNode.removeChild(el);
+                    }
+                });
+            } catch (e) {
+                // ดักจับข้อผิดพลาดหากมี
+            }
+        });
+        
+        // ลบทุกลิงก์ที่มีข้อความที่เกี่ยวข้อง
+        document.querySelectorAll('a').forEach(function(el) {
+            try {
+                const text = el.textContent.toLowerCase();
+                if (text.includes('ลงทะเบียน') || 
+                    text.includes('ลืมรหัสผ่าน') || 
+                    text.includes('กลับไปที่') || 
+                    text.includes('privacy policy')) {
+                    
+                    // ลบทั้ง parent ถ้าเป็น div หรือ p
+                    let parent = el;
+                    while (parent && parent.tagName !== 'BODY') {
+                        if (parent.tagName === 'DIV' || parent.tagName === 'P') {
+                            if (parent.parentNode) {
+                                parent.parentNode.removeChild(parent);
+                                break;
+                            }
+                        }
+                        parent = parent.parentNode;
+                    }
+                    
+                    // ถ้าไม่ได้ลบ parent ให้ลบแค่ลิงก์
+                    if (el.parentNode) {
+                        el.parentNode.removeChild(el);
+                    }
+                }
+            } catch (e) {
+                // ดักจับข้อผิดพลาดหากมี
+            }
+        });
+    });
+    </script>
+    <?php
+}
+
+/**
+ * ฟังก์ชันสำหรับลบตัวเลือกภาษาด้วย Output Buffer
+ */
+function dga_remove_language_switcher_ob() {
+    // เริ่มต้น output buffering
+    ob_start(function($buffer) {
+        // ลบตัวเลือกภาษาจาก HTML ด้วย regular expressions
+        $patterns = [
+            '/<select[^>]*(?:name=["\'](?:wp_lang|language)["\']|id=["\'][^"\']*(?:language|lang)[^"\']*["\'])[^>]*>.*?<\/select>/is',
+            '/<div[^>]*(?:id=["\'][^"\']*(?:language|lang)[^"\']*["\']|class=["\'][^"\']*(?:language|lang)[^"\']*["\'])[^>]*>.*?<\/div>/is',
+            '/<p[^>]*(?:class=["\'][^"\']*(?:language|lang)[^"\']*["\'])[^>]*>.*?<\/p>/is',
+            '/<a[^>]*>.*?เปลี่ยนภาษา.*?<\/a>/is',
+            '/<button[^>]*>.*?เปลี่ยนภาษา.*?<\/button>/is'
+        ];
+        
+        foreach ($patterns as $pattern) {
+            $buffer = preg_replace($pattern, '', $buffer);
+        }
+        
+        return $buffer;
+    });
+}
+
+/**
+ * ฟังก์ชันสำหรับลบลิงก์ด้วย Output Buffer (เพิ่มใหม่)
+ */
+function dga_remove_login_links_ob() {
+    // ถ้ามี output buffer ที่เปิดอยู่แล้ว ให้ใช้อันเดิม
+    if (ob_get_level() == 0) {
+        ob_start(function($buffer) {
+            // ลบลิงก์จาก HTML ด้วย regular expressions
+            $patterns = [
+                '/<p[^>]*id=["\'](nav|backtoblog)["\'][^>]*>.*?<\/p>/is',
+                '/<div[^>]*class=["\'](privacy-policy-page-link|login-footer)["\'][^>]*>.*?<\/div>/is',
+                '/<a[^>]*>.*?(?:ลงทะเบียน|ลืมรหัสผ่าน|กลับไปที่|Privacy Policy).*?<\/a>/is'
+            ];
+            
+            foreach ($patterns as $pattern) {
+                $buffer = preg_replace($pattern, '', $buffer);
+            }
+            
+            return $buffer;
+        });
+    }
+    
+    // ปิด output buffer ใน footer
+    add_action('login_footer', function() {
+        if (ob_get_level()) {
+            ob_end_flush();
+        }
+    }, 9999);
+}
+
+
+
+
+
+
+
+
 /**
  * เพิ่มฟังก์ชัน Skip to Content Link ที่ทำงานได้อย่างถูกต้อง
  * สำหรับเพิ่มการเข้าถึงเว็บไซต์ตามมาตรฐาน WCAG
@@ -3362,24 +3753,23 @@ add_shortcode('dga_carousel_slide', 'dga_carousel_slide_shortcode');
 /****** Login ******/
 
 // Add shortcode
-add_shortcode('dgalogin', 'modern_login_shortcode');
+add_shortcode('dgalogin', 'blue_orange_login_shortcode');
 
 // Register necessary scripts and styles
-add_action('wp_enqueue_scripts', 'modern_login_assets');
+add_action('wp_enqueue_scripts', 'blue_orange_login_assets');
 
-function modern_login_assets() {
+function blue_orange_login_assets() {
     $child_theme_url = get_stylesheet_directory_uri();
-    wp_enqueue_style('font-awesome', 'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css');
-    wp_enqueue_style('modern-login-style', $child_theme_url . '/css/modern-login.css', array(), '1.0.3');
-    wp_enqueue_script('modern-login-script', $child_theme_url . '/js/modern-login.js', array('jquery'), '1.0.3', true);
+    wp_enqueue_style('blue-orange-login-style', $child_theme_url . '/css/blue-orange-login.css', array(), '1.0.0');
+    wp_enqueue_script('blue-orange-login-script', $child_theme_url . '/js/blue-orange-login.js', array('jquery'), '1.0.0', true);
     
-    wp_localize_script('modern-login-script', 'modernLoginAjax', array(
+    wp_localize_script('blue-orange-login-script', 'blueOrangeLoginAjax', array(
         'ajaxurl' => admin_url('admin-ajax.php'),
-        'security' => wp_create_nonce('modern-login-nonce')
+        'security' => wp_create_nonce('blue-orange-login-nonce')
     ));
 }
 
-function modern_login_shortcode() {
+function blue_orange_login_shortcode() {
     if (is_user_logged_in() && !current_user_can('administrator')) {
         wp_redirect(home_url('/profile'));
         exit;
@@ -3387,31 +3777,22 @@ function modern_login_shortcode() {
 
     ob_start();
     ?>
-    <div class="modern-login-container">
-        <div class="modern-login-card">
-            <div class="modern-login-header">
+    <div class="blue-orange-login-container">
+        <div class="blue-orange-login-card">
+            <div class="blue-orange-login-header">
                 <h2>เข้าสู่ระบบ</h2>
-                <div class="step-indicator">
-                    <span class="step active" data-step="1">1</span>
-                    <span class="step-line"></span>
-                    <span class="step" data-step="2">2</span>
-                </div>
             </div>
             
-            <form id="modern-login-form" class="modern-login-form">
+            <form id="blue-orange-login-form" class="blue-orange-login-form">
                 <!-- ขั้นตอนที่ 1: กรอกชื่อผู้ใช้ -->
                 <div class="step-content" data-step="1">
                     <div class="form-group">
-                        <div class="input-group">
-                            <i class="fas fa-user"></i>
-                            <input type="text" id="username" name="username" placeholder="ชื่อผู้ใช้หรืออีเมล" required>
-                        </div>
+                        <input type="text" id="username" name="username" placeholder="ชื่อผู้ใช้หรืออีเมล" required>
                     </div>
 
                     <div class="form-group">
                         <button type="button" class="next-step-button">
                             <span>ถัดไป</span>
-                            <i class="fas fa-arrow-right"></i>
                         </button>
                     </div>
                 </div>
@@ -3419,20 +3800,14 @@ function modern_login_shortcode() {
                 <!-- ขั้นตอนที่ 2: กรอกรหัสผ่าน -->
                 <div class="step-content" data-step="2" style="display: none;">
                     <div class="user-info">
-                        <i class="fas fa-user-circle"></i>
                         <span class="username-display"></span>
-                        <button type="button" class="change-user">
-                            <i class="fas fa-pen"></i>
-                        </button>
+                        <button type="button" class="change-user">เปลี่ยน</button>
                     </div>
 
                     <div class="form-group">
-                        <div class="input-group">
-                            <i class="fas fa-lock"></i>
+                        <div class="password-wrapper">
                             <input type="password" id="password" name="password" placeholder="รหัสผ่าน" required>
-                            <button type="button" class="toggle-password">
-                                <i class="fas fa-eye"></i>
-                            </button>
+                            <button type="button" class="toggle-password">แสดง</button>
                         </div>
                     </div>
 
@@ -3455,7 +3830,7 @@ function modern_login_shortcode() {
                 <div class="login-message"></div>
             </form>
 
-            <div class="modern-login-footer">
+            <div class="blue-orange-login-footer">
                 <p>ยังไม่มีบัญชี? <a href="/register">ลงทะเบียน</a></p>
             </div>
         </div>
@@ -3464,11 +3839,11 @@ function modern_login_shortcode() {
     return ob_get_clean();
 }
 
-// Add new AJAX action for username check
+// AJAX action for username check
 add_action('wp_ajax_nopriv_check_username', 'check_username_exists');
 add_action('wp_ajax_check_username', 'check_username_exists');
 function check_username_exists() {
-    check_ajax_referer('modern-login-nonce', 'security');
+    check_ajax_referer('blue-orange-login-nonce', 'security');
 
     $username = sanitize_user($_POST['username']);
     
@@ -3485,11 +3860,11 @@ function check_username_exists() {
     }
 }
 
-// Existing login handler
-add_action('wp_ajax_nopriv_modern_login', 'handle_modern_login');
-add_action('wp_ajax_modern_login', 'handle_modern_login');
-function handle_modern_login() {
-    check_ajax_referer('modern-login-nonce', 'security');
+// Login handler
+add_action('wp_ajax_nopriv_blue_orange_login', 'handle_blue_orange_login');
+add_action('wp_ajax_blue_orange_login', 'handle_blue_orange_login');
+function handle_blue_orange_login() {
+    check_ajax_referer('blue-orange-login-nonce', 'security');
 
     $credentials = array(
         'user_login' => $_POST['username'],
@@ -6383,7 +6758,8 @@ define('CPM_FONTAWESOME_VERSION', '6.2.1');
 function complaint_form_enqueue_scripts() {
     global $post;
     
-    if ($post && (has_shortcode($post->post_content, 'complaint_form') || is_page())) {
+    // เช็คเฉพาะเมื่อมี shortcode [complaint_form] อยู่ในเนื้อหา
+    if ($post && has_shortcode($post->post_content, 'complaint_form')) {
         
         // Enqueue CSS
         wp_enqueue_style(
@@ -7078,6 +7454,408 @@ function filter_complaints_by_meta($query) {
     }
 }
 add_filter('parse_query', 'filter_complaints_by_meta');
+
+
+/********* ระบบค้นหาเรื่องร้องเรียน V1.2 - WCAG 2.1 AA Compliant ********/
+
+// Enqueue necessary scripts and styles
+function dga_complaint_search_enqueue_scripts() {
+    global $post;
+    
+    if ($post && has_shortcode($post->post_content, 'complaint_search')) {
+        
+        // Enqueue CSS
+        wp_enqueue_style(
+            'complaint-search-style',
+            get_stylesheet_directory_uri() . '/css/complaint-search.css',
+            array(),
+            '1.2.0'
+        );
+        
+        // Enqueue Font Awesome (หากยังไม่มีการ include ไว้แล้ว)
+        if (!wp_style_is('font-awesome', 'enqueued')) {
+            wp_enqueue_style(
+                'font-awesome',
+                'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.2.1/css/all.min.css',
+                array(),
+                '6.2.1'
+            );
+        }
+        
+        // Enqueue JS
+        wp_enqueue_script(
+            'complaint-search-script',
+            get_stylesheet_directory_uri() . '/js/complaint-search.js',
+            array('jquery'),
+            '1.2.0',
+            true
+        );
+
+        // ส่งค่าตัวแปรต่างๆ ไปยัง JavaScript
+        wp_localize_script(
+            'complaint-search-script',
+            'complaintSearchAjax',
+            array(
+                'ajaxurl' => admin_url('admin-ajax.php'),
+                'nonce' => wp_create_nonce('complaint_search_nonce'),
+                'error_not_found' => 'ไม่พบข้อมูลเรื่องร้องเรียนตามหมายเลขที่ระบุ กรุณาตรวจสอบและลองใหม่อีกครั้ง',
+                'error_invalid' => 'กรุณาระบุหมายเลขเรื่องร้องเรียนให้ถูกต้อง',
+                'error_system' => 'เกิดข้อผิดพลาดในระบบ กรุณาลองใหม่อีกครั้งในภายหลัง',
+                'prefix' => 'CPL-',
+                'aria_labels' => array(
+                    'searching' => 'กำลังค้นหา',
+                    'search_result' => 'ผลการค้นหา',
+                    'toggle_search' => 'เปิด/ปิด แถบค้นหา',
+                    'close_result' => 'ปิดผลการค้นหา'
+                )
+            )
+        );
+    }
+}
+add_action('wp_enqueue_scripts', 'dga_complaint_search_enqueue_scripts');
+
+// Create shortcode for complaint search
+function dga_complaint_search_shortcode() {
+    ob_start();
+    ?>
+    <div class="dga-complaint-search-container">
+        <!-- ปุ่มที่มีตัวหนังสือแนวตั้ง (หมุน 90 องศา) -->
+        <button type="button" id="dga-complaint-toggle-btn" class="dga-complaint-toggle-btn" aria-label="เปิด/ปิด แถบค้นหาเรื่องร้องเรียน" aria-expanded="false" aria-controls="dga-complaint-search-form">
+            <div class="toggle-text">
+                <span>ค้นหาสถานะ</span>
+            </div>
+            <div class="toggle-icon">
+                <i class="fas fa-search" aria-hidden="true"></i>
+            </div>
+        </button>
+        
+        <!-- ฟอร์มค้นหาที่จะขยายออกมาทางขวา -->
+        <div id="dga-complaint-search-form" class="dga-complaint-search-form" aria-hidden="true">
+            <h3 id="search-form-heading">ค้นหาสถานะเรื่องร้องเรียน</h3>
+            
+            <form id="complaint-search-form" aria-labelledby="search-form-heading">
+                <div class="form-group">
+                    <label for="complaint-ref">หมายเลขเรื่องร้องเรียน</label>
+                    <div class="input-with-button">
+                        <input 
+                            type="text" 
+                            id="complaint-ref" 
+                            name="complaint-ref" 
+                            placeholder="ระบุหมายเลขเรื่องร้องเรียน เช่น CPL-202505-000123"
+                            aria-required="true"
+                            autocomplete="off"
+                            value="CPL-"
+                        >
+                        <span id="complaint-ref-error" class="error-message" role="alert"></span>
+                        <button type="submit" class="search-btn" aria-label="ค้นหา">
+                            <i class="fas fa-search" aria-hidden="true"></i> ค้นหา
+                        </button>
+                    </div>
+                    <div class="form-hint">
+                        กรุณาระบุหมายเลขเรื่องร้องเรียนที่ได้รับจากระบบ
+                    </div>
+                </div>
+            </form>
+            
+            <div id="complaint-search-loading" class="complaint-search-loading" style="display: none;" role="status" aria-live="polite">
+                <div class="loading-spinner">
+                    <i class="fas fa-circle-notch fa-spin" aria-hidden="true"></i>
+                </div>
+                <span>กำลังค้นหา...</span>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Popup สำหรับแสดงผลการค้นหาแยกต่างหาก -->
+    <div id="complaint-result-popup" class="complaint-result-popup" aria-hidden="true">
+        <div class="complaint-popup-content">
+            <div id="complaint-search-result" class="complaint-search-result">
+                <!-- ผลลัพธ์จะถูกเพิ่มโดย JavaScript -->
+            </div>
+        </div>
+        <!-- พื้นหลังทึบสำหรับ overlay -->
+        <div class="complaint-popup-overlay"></div>
+    </div>
+    <?php
+    return ob_get_clean();
+}
+add_shortcode('complaint_search', 'dga_complaint_search_shortcode');
+
+// AJAX handler for complaint search (ยังคงใช้โค้ดเดิม)
+function dga_complaint_search_ajax_handler() {
+    // เนื้อหา AJAX handler คงเดิม
+    check_ajax_referer('complaint_search_nonce', 'nonce');
+    
+    // Get reference number
+    $ref_number = isset($_POST['ref_number']) ? sanitize_text_field(wp_unslash($_POST['ref_number'])) : '';
+    
+    // Validate reference number
+    if (empty($ref_number)) {
+        wp_send_json_error(array('message' => 'กรุณาระบุหมายเลขเรื่องร้องเรียน'));
+        return;
+    }
+    
+    // ค้นหาเรื่องร้องเรียนจากฐานข้อมูล - ใช้ meta_key ให้ตรงกับที่บันทึกในระบบ
+    $args = array(
+        'post_type' => 'complaint',
+        'post_status' => array('pending', 'publish', 'draft', 'in-progress', 'completed', 'rejected', 'closed', 'private'),
+        'posts_per_page' => 1,
+        'meta_query' => array(
+            array(
+                'key' => '_complaint_ref',
+                'value' => $ref_number,
+                'compare' => '='
+            )
+        )
+    );
+    
+    $complaints = new WP_Query($args);
+    
+    if ($complaints->have_posts()) {
+        $complaints->the_post();
+        $post_id = get_the_ID();
+        
+        // ดึงข้อมูลเรื่องร้องเรียน
+        $type = get_post_meta($post_id, '_complaint_type', true);
+        $type_label = get_complaint_type_label($type);
+        
+        $type_other = '';
+        if ($type == 'other') {
+            $type_other = ' (' . get_post_meta($post_id, '_typeOther', true) . ')';
+        }
+        
+        $department = get_post_meta($post_id, '_complaint_department', true);
+        $status = get_post_status($post_id);
+        $complaint_date = get_post_meta($post_id, '_complaint_date', true);
+        $due_date = get_post_meta($post_id, '_response_due_date', true);
+        $is_anonymous = get_post_meta($post_id, '_is_anonymous', true);
+        
+        // แปลงสถานะให้เป็นภาษาไทย
+        $status_labels = array(
+            'pending' => 'รอดำเนินการ',
+            'publish' => 'รอดำเนินการ',
+            'draft' => 'รอดำเนินการ',
+            'private' => 'รอดำเนินการ',
+            'in-progress' => 'กำลังดำเนินการ',
+            'completed' => 'ดำเนินการเสร็จสิ้น',
+            'rejected' => 'ไม่รับพิจารณา',
+            'closed' => 'ปิดเรื่อง'
+        );
+        
+        $status_label = isset($status_labels[$status]) ? $status_labels[$status] : $status;
+        
+        // สร้าง progress step ตามสถานะ
+        $progress_steps = array(
+            'pending' => 1,
+            'publish' => 1,
+            'draft' => 1,
+            'private' => 1,
+            'in-progress' => 2,
+            'completed' => 3,
+            'rejected' => 3,
+            'closed' => 3
+        );
+        
+        $current_step = isset($progress_steps[$status]) ? $progress_steps[$status] : 1;
+        
+        // จัดเตรียมข้อมูลสำหรับส่งกลับ
+        $result = array(
+            'ref_number' => $ref_number,
+            'complaint_type' => $type_label . $type_other,
+            'department' => $department,
+            'status' => $status_label,
+            'complaint_date' => !empty($complaint_date) ? date_i18n('d/m/Y', strtotime($complaint_date)) : date_i18n('d/m/Y', strtotime(get_the_date())),
+            'due_date' => !empty($due_date) ? date_i18n('d/m/Y', strtotime($due_date)) : '',
+            'current_step' => $current_step,
+            'details' => wp_strip_all_tags(get_the_content())
+        );
+        
+        wp_reset_postdata();
+        wp_send_json_success($result);
+        
+    } else {
+        // ถ้าค้นหาไม่พบ ลองค้นหาแบบ LIKE
+        $args = array(
+            'post_type' => 'complaint',
+            'post_status' => array('pending', 'publish', 'draft', 'in-progress', 'completed', 'rejected', 'closed', 'private'),
+            'posts_per_page' => 1,
+            'meta_query' => array(
+                array(
+                    'key' => '_complaint_ref',
+                    'value' => $ref_number,
+                    'compare' => 'LIKE'
+                )
+            )
+        );
+        
+        $complaints_like = new WP_Query($args);
+        
+        if ($complaints_like->have_posts()) {
+            // ถ้าพบด้วยการค้นหาแบบ LIKE ใช้ข้อมูลนั้น
+            $complaints_like->the_post();
+            $post_id = get_the_ID();
+            
+            // ดึงค่าเลขที่เรื่องร้องเรียนที่ถูกต้อง
+            $correct_ref = get_post_meta($post_id, '_complaint_ref', true);
+            
+            // ดึงข้อมูลเรื่องร้องเรียน
+            $type = get_post_meta($post_id, '_complaint_type', true);
+            $type_label = get_complaint_type_label($type);
+            
+            $type_other = '';
+            if ($type == 'other') {
+                $type_other = ' (' . get_post_meta($post_id, '_typeOther', true) . ')';
+            }
+            
+            $department = get_post_meta($post_id, '_complaint_department', true);
+            $status = get_post_status($post_id);
+            $complaint_date = get_post_meta($post_id, '_complaint_date', true);
+            $due_date = get_post_meta($post_id, '_response_due_date', true);
+            $is_anonymous = get_post_meta($post_id, '_is_anonymous', true);
+            
+            // แปลงสถานะให้เป็นภาษาไทย
+            $status_labels = array(
+                'pending' => 'รอดำเนินการ',
+                'publish' => 'รอดำเนินการ',
+                'draft' => 'รอดำเนินการ',
+                'private' => 'รอดำเนินการ',
+                'in-progress' => 'กำลังดำเนินการ',
+                'completed' => 'ดำเนินการเสร็จสิ้น',
+                'rejected' => 'ไม่รับพิจารณา',
+                'closed' => 'ปิดเรื่อง'
+            );
+            
+            $status_label = isset($status_labels[$status]) ? $status_labels[$status] : $status;
+            
+            // สร้าง progress step ตามสถานะ
+            $progress_steps = array(
+                'pending' => 1,
+                'publish' => 1,
+                'draft' => 1,
+                'private' => 1,
+                'in-progress' => 2,
+                'completed' => 3,
+                'rejected' => 3,
+                'closed' => 3
+            );
+            
+            $current_step = isset($progress_steps[$status]) ? $progress_steps[$status] : 1;
+            
+            // จัดเตรียมข้อมูลสำหรับส่งกลับ
+            $result = array(
+                'ref_number' => $correct_ref, // ใช้เลขอ้างอิงที่ถูกต้องจากฐานข้อมูล
+                'complaint_type' => $type_label . $type_other,
+                'department' => $department,
+                'status' => $status_label,
+                'complaint_date' => !empty($complaint_date) ? date_i18n('d/m/Y', strtotime($complaint_date)) : date_i18n('d/m/Y', strtotime(get_the_date())),
+                'due_date' => !empty($due_date) ? date_i18n('d/m/Y', strtotime($due_date)) : '',
+                'current_step' => $current_step,
+                'details' => wp_strip_all_tags(get_the_content())
+            );
+            
+            wp_reset_postdata();
+            wp_send_json_success($result);
+        } else {
+            // ลองค้นหาแบบ SQL query โดยตรงเพื่อหาค่าที่ใกล้เคียงที่สุด
+            global $wpdb;
+            $sql = $wpdb->prepare(
+                "SELECT post_id, meta_value FROM {$wpdb->postmeta} 
+                 WHERE meta_key = '_complaint_ref' 
+                 AND meta_value LIKE %s
+                 LIMIT 1", 
+                '%' . $wpdb->esc_like($ref_number) . '%'
+            );
+            
+            $direct_result = $wpdb->get_row($sql);
+            
+            if ($direct_result) {
+                // ใช้ post_id ที่ได้ไปดึงข้อมูลและส่งกลับเหมือนข้างบน
+                $post_id = $direct_result->post_id;
+                $correct_ref = $direct_result->meta_value;
+                
+                // ดึงข้อมูล post
+                $complaint_post = get_post($post_id);
+                
+                if ($complaint_post) {
+                    // ดึงข้อมูลเรื่องร้องเรียน
+                    $type = get_post_meta($post_id, '_complaint_type', true);
+                    $type_label = get_complaint_type_label($type);
+                    
+                    $type_other = '';
+                    if ($type == 'other') {
+                        $type_other = ' (' . get_post_meta($post_id, '_typeOther', true) . ')';
+                    }
+                    
+                    $department = get_post_meta($post_id, '_complaint_department', true);
+                    $status = get_post_status($post_id);
+                    $complaint_date = get_post_meta($post_id, '_complaint_date', true);
+                    $due_date = get_post_meta($post_id, '_response_due_date', true);
+                    
+                    // แปลงสถานะให้เป็นภาษาไทย
+                    $status_labels = array(
+                        'pending' => 'รอดำเนินการ',
+                        'publish' => 'รอดำเนินการ',
+                        'draft' => 'รอดำเนินการ',
+                        'private' => 'รอดำเนินการ',
+                        'in-progress' => 'กำลังดำเนินการ',
+                        'completed' => 'ดำเนินการเสร็จสิ้น',
+                        'rejected' => 'ไม่รับพิจารณา',
+                        'closed' => 'ปิดเรื่อง'
+                    );
+                    
+                    $status_label = isset($status_labels[$status]) ? $status_labels[$status] : $status;
+                    
+                    // สร้าง progress step ตามสถานะ
+                    $progress_steps = array(
+                        'pending' => 1,
+                        'publish' => 1,
+                        'draft' => 1,
+                        'private' => 1,
+                        'in-progress' => 2,
+                        'completed' => 3,
+                        'rejected' => 3,
+                        'closed' => 3
+                    );
+                    
+                    $current_step = isset($progress_steps[$status]) ? $progress_steps[$status] : 1;
+                    
+                    // จัดเตรียมข้อมูลสำหรับส่งกลับ
+                    $result = array(
+                        'ref_number' => $correct_ref, // ใช้เลขอ้างอิงที่ถูกต้องจากฐานข้อมูล
+                        'complaint_type' => $type_label . $type_other,
+                        'department' => $department,
+                        'status' => $status_label,
+                        'complaint_date' => !empty($complaint_date) ? date_i18n('d/m/Y', strtotime($complaint_date)) : date_i18n('d/m/Y', strtotime($complaint_post->post_date)),
+                        'due_date' => !empty($due_date) ? date_i18n('d/m/Y', strtotime($due_date)) : '',
+                        'current_step' => $current_step,
+                        'details' => wp_strip_all_tags($complaint_post->post_content)
+                    );
+                    
+                    wp_send_json_success($result);
+                    return;
+                }
+            }
+            
+            wp_send_json_error(array('message' => 'ไม่พบข้อมูลเรื่องร้องเรียนตามหมายเลขที่ระบุ กรุณาตรวจสอบและลองใหม่อีกครั้ง'));
+        }
+    }
+}
+add_action('wp_ajax_complaint_search', 'dga_complaint_search_ajax_handler');
+add_action('wp_ajax_nopriv_complaint_search', 'dga_complaint_search_ajax_handler');
+
+// Helper function to get complaint type label
+if (!function_exists('get_complaint_type_label')) {
+    function get_complaint_type_label($type) {
+        $types = array(
+            'corruption' => 'การทุจริตประพฤติมิชอบ',
+            'negligence' => 'การละเลยการปฏิบัติหน้าที่',
+            'misconduct' => 'การปฏิบัติหน้าที่โดยมิชอบ',
+            'rights' => 'การละเมิดสิทธิ',
+            'other' => 'อื่นๆ'
+        );
+        return isset($types[$type]) ? $types[$type] : 'อื่นๆ';
+    }
+}
 
 
 
@@ -13037,9 +13815,6 @@ function contact_form_shortcode() {
                         aria-describedby="name-error"
                         autocomplete="name"
                     >
-                    <div class="input-icon">
-                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="icon"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
-                    </div>
                 </div>
                 <div id="name-error" class="error-message" aria-live="polite"></div>
             </div>
@@ -13061,9 +13836,6 @@ function contact_form_shortcode() {
                         aria-describedby="email-error"
                         autocomplete="email"
                     >
-                    <div class="input-icon">
-                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="icon"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path><polyline points="22,6 12,13 2,6"></polyline></svg>
-                    </div>
                 </div>
                 <div id="email-error" class="error-message" aria-live="polite"></div>
             </div>
@@ -13095,9 +13867,6 @@ function contact_form_shortcode() {
                     aria-label="ส่งแบบฟอร์ม"
                 >
                     <span class="button-text">ส่งรายละเอียด</span>
-                    <span class="button-icon" aria-hidden="true">
-                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="icon"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
-                    </span>
                 </button>
             </div>
         </form>
@@ -13521,7 +14290,8 @@ class UserPermissionController {
 
         wp_localize_script('user-permission-script', 'userPermissionAjax', array(
             'ajaxurl' => admin_url('admin-ajax.php'),
-            'nonce' => wp_create_nonce('user_permission_nonce')
+            'nonce' => wp_create_nonce('user_permission_nonce'),
+            'homeUrl' => home_url() // เพิ่ม home URL
         ));
     }
 
@@ -13582,10 +14352,36 @@ class UserPermissionController {
                 if (!$has_access) {
                     // Add blur overlay and login modal
                     echo '<div class="user-permission-overlay">
-                        <div class="user-permission-message">
-                            <h2>หน้านี้ถูกจำกัดการเข้าถึง</h2>
-                            <p>กรุณาลงชื่อเข้าใช้ด้วยบัญชีที่มีสิทธิ์</p>
-                            <button id="user-permission-login-btn" class="user-permission-login-btn">ลงชื่อเข้าใช้</button>
+                        <div class="user-permission-modal">
+                            <div class="modal-header">
+                                <div class="lock-icon">
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                        <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+                                        <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+                                    </svg>
+                                </div>
+                            </div>
+                            <div class="user-permission-message">
+                                <h2>การเข้าถึงถูกจำกัด</h2>
+                                <p>หน้านี้ต้องการสิทธิ์พิเศษในการเข้าถึง</p>
+                                <div class="button-group">
+                                    <button id="user-permission-login-btn" class="user-permission-login-btn">
+                                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                            <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"></path>
+                                            <polyline points="10 17 15 12 10 7"></polyline>
+                                            <line x1="15" y1="12" x2="3" y2="12"></line>
+                                        </svg>
+                                        ลงชื่อเข้าใช้
+                                    </button>
+                                    <button id="user-permission-home-btn" class="user-permission-home-btn">
+                                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                            <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path>
+                                            <polyline points="9 22 9 12 15 12 15 22"></polyline>
+                                        </svg>
+                                        กลับสู่หน้าหลัก
+                                    </button>
+                                </div>
+                            </div>
                         </div>
                     </div>';
                 }
@@ -18189,15 +18985,11 @@ if (!defined('ABSPATH')) {
 function dynamic_post_cards_enqueue_scripts() {
     $theme_directory = get_stylesheet_directory_uri();
     
-    // CSS - อัพเดตเวอร์ชันเป็น 1.0.7
-    wp_enqueue_style('dynamic-post-cards-css', $theme_directory . '/css/dynamic-post-cards.css', array(), '1.0.7');
+    // CSS - อัพเดตเวอร์ชันเป็น 1.0.9
+    wp_enqueue_style('dynamic-post-cards-css', $theme_directory . '/css/dynamic-post-cards.css', array(), '1.0.9');
     
-    // jQuery UI สำหรับ Autocomplete
-    wp_enqueue_style('jquery-ui-css', 'https://code.jquery.com/ui/1.13.2/themes/base/jquery-ui.css');
-    wp_enqueue_script('jquery-ui-autocomplete');
-    
-    // JavaScript - อัพเดตเวอร์ชันเป็น 1.0.7
-    wp_enqueue_script('dynamic-post-cards-js', $theme_directory . '/js/dynamic-post-cards.js', array('jquery', 'jquery-ui-autocomplete'), '1.0.7', true);
+    // JavaScript - อัพเดตเวอร์ชันเป็น 1.0.9
+    wp_enqueue_script('dynamic-post-cards-js', $theme_directory . '/js/dynamic-post-cards.js', array('jquery'), '1.0.9', true);
     
     // ส่งข้อมูลไปยัง JavaScript
     wp_localize_script('dynamic-post-cards-js', 'dynamic_post_cards_params', array(
@@ -18206,94 +18998,6 @@ function dynamic_post_cards_enqueue_scripts() {
     ));
 }
 add_action('wp_enqueue_scripts', 'dynamic_post_cards_enqueue_scripts');
-
-// AJAX handler สำหรับ Autocomplete
-function dynamic_post_cards_autocomplete() {
-    check_ajax_referer('dynamic_post_cards_nonce', 'nonce');
-    
-    $term = isset($_GET['term']) ? sanitize_text_field($_GET['term']) : '';
-    // รับค่า post_type จาก request
-    $post_type = isset($_GET['post_type']) ? sanitize_text_field($_GET['post_type']) : 'post';
-    $results = array();
-    
-    if (!empty($term)) {
-        global $wpdb;
-        
-        // ค้นหาใน title ของโพสต์ตาม post_type ที่กำหนด
-        $title_query = $wpdb->prepare(
-            "SELECT ID, post_title FROM {$wpdb->posts} 
-            WHERE post_type = %s 
-            AND post_status = 'publish' 
-            AND post_title LIKE %s 
-            LIMIT 10",
-            $post_type,
-            '%' . $wpdb->esc_like($term) . '%'
-        );
-        
-        $title_results = $wpdb->get_results($title_query);
-        
-        // ค้นหาใน custom fields
-        $meta_query = $wpdb->prepare(
-            "SELECT p.ID, p.post_title, pm.meta_key, pm.meta_value 
-            FROM {$wpdb->posts} p 
-            INNER JOIN {$wpdb->postmeta} pm ON p.ID = pm.post_id 
-            WHERE p.post_type = %s 
-            AND p.post_status = 'publish' 
-            AND pm.meta_key IN ('at_docnum_1', 'at_docnum_2') 
-            AND pm.meta_value LIKE %s 
-            LIMIT 10",
-            $post_type,
-            '%' . $wpdb->esc_like($term) . '%'
-        );
-        
-        $meta_results = $wpdb->get_results($meta_query);
-        
-        // รวมผลลัพธ์
-        foreach ($title_results as $post) {
-            $results[] = array(
-                'id' => $post->ID,
-                'label' => $post->post_title,
-                'value' => $post->post_title,
-                'type' => 'title'
-            );
-        }
-        
-        foreach ($meta_results as $post) {
-            $meta_label = '';
-            if ($post->meta_key == 'at_docnum_1') {
-                $meta_label = "เลขที่ {$post->meta_value} - {$post->post_title}";
-            } else {
-                $meta_label = "เลขที่ {$post->meta_value} - {$post->post_title}";
-            }
-            
-            $results[] = array(
-                'id' => $post->ID,
-                'label' => $meta_label,
-                'value' => $post->post_title,
-                'meta_key' => $post->meta_key,
-                'meta_value' => $post->meta_value,
-                'type' => 'custom_field'
-            );
-        }
-        
-        // ลบรายการซ้ำ
-        $unique_results = array();
-        $ids = array();
-        
-        foreach ($results as $result) {
-            if (!in_array($result['id'], $ids)) {
-                $ids[] = $result['id'];
-                $unique_results[] = $result;
-            }
-        }
-        
-        $results = $unique_results;
-    }
-    
-    wp_send_json($results);
-}
-add_action('wp_ajax_dynamic_post_cards_autocomplete', 'dynamic_post_cards_autocomplete');
-add_action('wp_ajax_nopriv_dynamic_post_cards_autocomplete', 'dynamic_post_cards_autocomplete');
 
 // ฟังก์ชัน shortcode หลัก
 function dynamic_post_cards_shortcode($atts) {
@@ -18333,16 +19037,9 @@ function dynamic_post_cards_shortcode($atts) {
     $output .= '<button type="button" class="view-mode-btn list-view-btn ' . ($atts['view'] == 'list' ? 'active' : '') . '" aria-label="แสดงแบบรายการ"><span class="dashicons dashicons-list-view"></span> รายการ</button>';
     $output .= '</div>';
     
-    // เพิ่มช่องค้นหาพร้อมระบบ Autocomplete และ Badge กรอง
+    // เพิ่มช่องค้นหาแบบธรรมดา
     $output .= '<div class="search-control">';
-    $output .= '<div class="search-input-wrapper" style="flex-grow: 1; position: relative;">';
-    $output .= '<input type="text" class="search-input autocomplete-search" placeholder="ค้นหาเอกสาร..." aria-label="ค้นหาโพสต์หรือเลขที่เอกสาร">';
-    $output .= '</div>';
-    // เพิ่ม Badge สำหรับกรองเอกสาร
-    $output .= '<div class="filter-badges">';
-    $output .= '<span class="filter-badge orange-badge-mini" data-field="at_docnum_1" aria-label="กรองเฉพาะเอกสาร มสพร.">มสพร.</span>';
-    $output .= '<span class="filter-badge gold-badge-mini" data-field="at_docnum_2" aria-label="กรองเฉพาะเอกสาร มรด.">มรด.</span>';
-    $output .= '</div>';
+    $output .= '<input type="text" class="search-input" placeholder="ค้นหาเอกสาร..." aria-label="ค้นหาโพสต์">';
     $output .= '</div>';
     
     // ตัวเลือกการกรองและเรียงลำดับ
@@ -18440,7 +19137,6 @@ function dynamic_post_cards_load_posts() {
     $order = sanitize_text_field($_POST['order']);
     $search = isset($_POST['search']) ? sanitize_text_field($_POST['search']) : '';
     $year = isset($_POST['year']) ? intval($_POST['year']) : '';
-    $filter_field = isset($_POST['filter_field']) ? sanitize_text_field($_POST['filter_field']) : ''; // เพิ่มการรับค่า filter_field
     
     // สร้างอาร์กิวเมนต์สำหรับ WP_Query
     $args = array(
@@ -18462,66 +19158,24 @@ function dynamic_post_cards_load_posts() {
         );
     }
     
-    // กรองตาม Custom Field ถ้ามีการระบุ
-    if (!empty($filter_field)) {
+    // เพิ่มการค้นหาใน title และ content
+    if (!empty($search)) {
+        $args['s'] = $search;
+        
+        // เพิ่มการค้นหาใน meta fields ด้วย
         $args['meta_query'] = array(
+            'relation' => 'OR',
             array(
-                'key' => $filter_field,
-                'compare' => 'EXISTS'
+                'key' => 'at_docnum_1',
+                'value' => $search,
+                'compare' => 'LIKE'
+            ),
+            array(
+                'key' => 'at_docnum_2',
+                'value' => $search,
+                'compare' => 'LIKE'
             )
         );
-    }
-    
-    // เพิ่มการค้นหา
-    if (!empty($search)) {
-        // ตรวจสอบว่ามีการค้นหาตาม post_id หรือไม่ (กรณีเลือกจาก autocomplete)
-        if (is_numeric($search) && intval($search) > 0) {
-            $args['p'] = intval($search);
-        } else {
-            // ทำให้การค้นหาใน post title และ content มีความสำคัญมากกว่า
-            $args['s'] = $search;
-            
-            // เพิ่มการค้นหาใน meta_query ในลักษณะที่เป็นตัวเลือก
-            // ไม่ใช้ AND กับคำค้นหาหลัก เพื่อให้ผลลัพธ์มากขึ้น
-            if (empty($args['meta_query'])) {
-                $args['meta_query'] = array(
-                    'relation' => 'OR',
-                    array(
-                        'key' => 'at_docnum_1',
-                        'value' => $search,
-                        'compare' => 'LIKE'
-                    ),
-                    array(
-                        'key' => 'at_docnum_2',
-                        'value' => $search,
-                        'compare' => 'LIKE'
-                    )
-                );
-            } else {
-                // ถ้ามี meta_query อยู่แล้ว (จาก filter_field)
-                // ให้เพิ่มเงื่อนไขการค้นหาโดยการสร้าง meta_query ใหม่
-                // ที่รวมทั้งเงื่อนไขเดิมและเงื่อนไขใหม่แบบ OR
-                $existing_meta_query = $args['meta_query'];
-                
-                $args['meta_query'] = array(
-                    'relation' => 'OR',
-                    $existing_meta_query,
-                    array(
-                        'relation' => 'OR',
-                        array(
-                            'key' => 'at_docnum_1',
-                            'value' => $search,
-                            'compare' => 'LIKE'
-                        ),
-                        array(
-                            'key' => 'at_docnum_2',
-                            'value' => $search,
-                            'compare' => 'LIKE'
-                        )
-                    )
-                );
-            }
-        }
     }
     
     // เพิ่มหมวดหมู่ (category) ถ้ามีการระบุ
@@ -18644,8 +19298,7 @@ function dynamic_post_cards_load_posts() {
         $response['debug'] = array(
             'query_vars' => $query->query_vars,
             'request' => $query->request,
-            'search_term' => $search,
-            'filter_field' => $filter_field
+            'search_term' => $search
         );
     }
 
@@ -37329,3 +37982,1640 @@ function dga_print_template_ajax() {
 }
 add_action('wp_ajax_dga_print_template', 'dga_print_template_ajax');
 add_action('wp_ajax_nopriv_dga_print_template', 'dga_print_template_ajax');
+
+
+/***** ฟังก์ชั่น reCAPTCHA V.3 *****/
+
+// ป้องกันการเข้าถึงโดยตรง
+if (!defined('ABSPATH')) {
+    exit;
+}
+
+// กำหนดค่า reCAPTCHA
+define('DGA_RECAPTCHA_SITE_KEY', '6LcULDkrAAAAAKmcMSBaRZ61-8uYxCRtG6LcEnhy');
+define('DGA_RECAPTCHA_SECRET_KEY', '6LcULDkrAAAAAAZ--tIZ5iBJDmhmkchu5_zxBQCJ');
+
+// ลงทะเบียน shortcode
+add_shortcode('dga_recaptcha_v3', 'dga_recaptcha_v3_shortcode');
+
+function dga_recaptcha_v3_shortcode($atts) {
+    // กำหนดค่าเริ่มต้นของ attributes
+    $atts = shortcode_atts(array(
+        'action' => 'submit',
+        'callback' => '',
+        'form_id' => '',
+        'button_id' => ''
+    ), $atts, 'dga_recaptcha_v3');
+
+    // Generate unique ID
+    $unique_id = 'dga-recaptcha-' . wp_rand(1000, 9999);
+
+    ob_start();
+    ?>
+    <div class="dga-recaptcha-container" 
+         id="<?php echo esc_attr($unique_id); ?>"
+         data-action="<?php echo esc_attr($atts['action']); ?>"
+         data-callback="<?php echo esc_attr($atts['callback']); ?>"
+         data-form-id="<?php echo esc_attr($atts['form_id']); ?>"
+         data-button-id="<?php echo esc_attr($atts['button_id']); ?>">
+        <input type="hidden" id="<?php echo esc_attr($unique_id); ?>-token" name="recaptcha_token" />
+        <input type="hidden" name="recaptcha_action" value="<?php echo esc_attr($atts['action']); ?>" />
+    </div>
+    <?php
+    
+    return ob_get_clean();
+}
+
+// เพิ่ม reCAPTCHA เข้าไปใน Contact Form อัตโนมัติ
+add_filter('wp_footer', 'dga_inject_recaptcha_to_contact_form');
+function dga_inject_recaptcha_to_contact_form() {
+    if (has_shortcode(get_the_content(), 'department_contact')) {
+        ?>
+        <script>
+        jQuery(document).ready(function($) {
+            // เพิ่ม reCAPTCHA container เข้าไปใน form
+            var recaptchaHtml = `
+                <div class="dga-recaptcha-container" 
+                     id="contact-form-recaptcha"
+                     data-action="contact_form"
+                     data-form-id="department-contact-form">
+                    <input type="hidden" name="recaptcha_token" />
+                    <input type="hidden" name="recaptcha_action" value="contact_form" />
+                </div>
+            `;
+            $('#department-contact-form').append(recaptchaHtml);
+        });
+        </script>
+        <?php
+    }
+}
+
+// Enqueue scripts และ styles
+add_action('wp_enqueue_scripts', 'dga_recaptcha_v3_enqueue_assets');
+
+function dga_recaptcha_v3_enqueue_assets() {
+    global $post;
+    
+    // ตรวจสอบว่ามี shortcode หรือ contact form ในหน้านี้หรือไม่
+    $has_recaptcha = (is_a($post, 'WP_Post') && has_shortcode($post->post_content, 'dga_recaptcha_v3'));
+    $has_contact_form = (is_a($post, 'WP_Post') && has_shortcode($post->post_content, 'department_contact'));
+    
+    if ($has_recaptcha || $has_contact_form) {
+        // Enqueue Google reCAPTCHA script
+        wp_enqueue_script(
+            'google-recaptcha-v3',
+            'https://www.google.com/recaptcha/api.js?render=' . DGA_RECAPTCHA_SITE_KEY,
+            array(),
+            null,
+            true
+        );
+        
+        // Enqueue custom JavaScript
+        wp_enqueue_script(
+            'dga-recap-v3',
+            get_stylesheet_directory_uri() . '/js/dga-recap-v3.js',
+            array('jquery', 'google-recaptcha-v3'),
+            '1.0.0',
+            true
+        );
+        
+        // Localize script
+        wp_localize_script('dga-recap-v3', 'dga_recaptcha_ajax', array(
+            'ajax_url' => admin_url('admin-ajax.php'),
+            'nonce' => wp_create_nonce('dga_recaptcha_v3_nonce'),
+            'site_key' => DGA_RECAPTCHA_SITE_KEY
+        ));
+        
+        // Enqueue custom CSS
+        wp_enqueue_style(
+            'dga-recap-v3',
+            get_stylesheet_directory_uri() . '/css/dga-recap-v3.css',
+            array(),
+            '1.0.0'
+        );
+    }
+}
+
+// AJAX handler สำหรับการ verify reCAPTCHA token
+add_action('wp_ajax_dga_verify_recaptcha', 'dga_verify_recaptcha_ajax');
+add_action('wp_ajax_nopriv_dga_verify_recaptcha', 'dga_verify_recaptcha_ajax');
+
+function dga_verify_recaptcha_ajax() {
+    // ตรวจสอบ nonce
+    if (!check_ajax_referer('dga_recaptcha_v3_nonce', 'nonce', false)) {
+        wp_send_json_error(array('message' => 'Invalid nonce'));
+    }
+    
+    // รับ token จาก POST request
+    $token = isset($_POST['token']) ? sanitize_text_field($_POST['token']) : '';
+    $action = isset($_POST['action']) ? sanitize_text_field($_POST['action']) : '';
+    
+    if (empty($token)) {
+        wp_send_json_error(array('message' => 'Token is required'));
+    }
+    
+    // Verify token กับ Google reCAPTCHA
+    $response = wp_remote_post('https://www.google.com/recaptcha/api/siteverify', array(
+        'body' => array(
+            'secret' => DGA_RECAPTCHA_SECRET_KEY,
+            'response' => $token,
+            'remoteip' => $_SERVER['REMOTE_ADDR']
+        )
+    ));
+    
+    if (is_wp_error($response)) {
+        wp_send_json_error(array('message' => 'Error verifying reCAPTCHA'));
+    }
+    
+    $body = wp_remote_retrieve_body($response);
+    $result = json_decode($body, true);
+    
+    // ตรวจสอบผลลัพธ์
+    if ($result['success'] && $result['score'] >= 0.5) {
+        wp_send_json_success(array(
+            'message' => 'reCAPTCHA verified successfully',
+            'score' => $result['score'],
+            'action' => $result['action']
+        ));
+    } else {
+        wp_send_json_error(array(
+            'message' => 'reCAPTCHA verification failed',
+            'score' => isset($result['score']) ? $result['score'] : 0,
+            'errors' => isset($result['error-codes']) ? $result['error-codes'] : array()
+        ));
+    }
+}
+
+// เพิ่ม reCAPTCHA verification เข้าไปใน existing contact form handler
+add_action('init', 'dga_override_contact_form_handler');
+function dga_override_contact_form_handler() {
+    remove_action('wp_ajax_contact_form_submit', 'handle_contact_form_submission');
+    remove_action('wp_ajax_nopriv_contact_form_submit', 'handle_contact_form_submission');
+    
+    add_action('wp_ajax_contact_form_submit', 'dga_handle_contact_form_with_recaptcha');
+    add_action('wp_ajax_nopriv_contact_form_submit', 'dga_handle_contact_form_with_recaptcha');
+}
+
+function dga_handle_contact_form_with_recaptcha() {
+    // ตรวจสอบ reCAPTCHA token ก่อน
+    $recaptcha_token = isset($_POST['recaptcha_token']) ? sanitize_text_field($_POST['recaptcha_token']) : '';
+    $recaptcha_action = isset($_POST['recaptcha_action']) ? sanitize_text_field($_POST['recaptcha_action']) : 'contact_form';
+    
+    if (empty($recaptcha_token)) {
+        wp_send_json(array(
+            'status' => 'error',
+            'message' => 'กรุณายืนยันว่าคุณไม่ใช่บอท'
+        ));
+        return;
+    }
+    
+    // Verify reCAPTCHA
+    $verification = dga_verify_recaptcha_server_side($recaptcha_token, $recaptcha_action);
+    
+    if (!$verification['success']) {
+        wp_send_json(array(
+            'status' => 'error',
+            'message' => 'การยืนยันความปลอดภัยล้มเหลว กรุณาลองใหม่อีกครั้ง'
+        ));
+        return;
+    }
+    
+    // ถ้า reCAPTCHA ผ่าน ให้ดำเนินการ form submission ต่อ
+    $contact_name = sanitize_text_field($_POST['contact_name']);
+    $contact_email = sanitize_email($_POST['contact_email']);
+    $contact_message = sanitize_textarea_field($_POST['contact_message']);
+    
+    $data = array(
+        'contact_name' => $contact_name,
+        'contact_email' => $contact_email,
+        'contact_message' => $contact_message
+    );
+
+    // Set email headers
+    $headers = array(
+        'Content-Type: text/html; charset=UTF-8',
+        'From: ' . get_bloginfo('name') . ' <' . get_bloginfo('admin_email') . '>'
+    );
+
+    // Send email to admin
+    $admin_email = get_option('admin_email');
+    $admin_subject = '[' . get_bloginfo('name') . '] มีข้อความติดต่อใหม่จาก ' . $contact_name;
+    $admin_message = get_contact_email_template($data, 'admin');
+    
+    $admin_mail_sent = wp_mail($admin_email, $admin_subject, $admin_message, $headers);
+
+    // Send confirmation email to user
+    $user_subject = '[' . get_bloginfo('name') . '] ยืนยันการส่งข้อความติดต่อ';
+    $user_message = get_contact_email_template($data, 'user');
+    
+    $user_mail_sent = wp_mail($contact_email, $user_subject, $user_message, $headers);
+
+    // Prepare response
+    if ($admin_mail_sent && $user_mail_sent) {
+        $response = array(
+            'status' => 'success',
+            'message' => 'ส่งข้อความเรียบร้อยแล้ว',
+            'recaptcha_score' => $verification['score']
+        );
+    } else {
+        $response = array(
+            'status' => 'error',
+            'message' => 'เกิดข้อผิดพลาดในการส่งข้อความ กรุณาลองใหม่อีกครั้ง'
+        );
+    }
+    
+    wp_send_json($response);
+}
+
+// Function สำหรับการตรวจสอบ reCAPTCHA ในฝั่ง server
+function dga_verify_recaptcha_server_side($token, $action = 'submit') {
+    if (empty($token)) {
+        return array('success' => false, 'message' => 'Token is required');
+    }
+    
+    $response = wp_remote_post('https://www.google.com/recaptcha/api/siteverify', array(
+        'body' => array(
+            'secret' => DGA_RECAPTCHA_SECRET_KEY,
+            'response' => $token,
+            'remoteip' => $_SERVER['REMOTE_ADDR']
+        )
+    ));
+    
+    if (is_wp_error($response)) {
+        return array('success' => false, 'message' => 'Error verifying reCAPTCHA');
+    }
+    
+    $body = wp_remote_retrieve_body($response);
+    $result = json_decode($body, true);
+    
+    // ตรวจสอบว่า action ตรงกันหรือไม่
+    $action_match = (!empty($result['action']) && $result['action'] === $action);
+    
+    if ($result['success'] && $result['score'] >= 0.5 && $action_match) {
+        return array(
+            'success' => true,
+            'score' => $result['score'],
+            'action' => $result['action']
+        );
+    }
+    
+    return array(
+        'success' => false,
+        'score' => isset($result['score']) ? $result['score'] : 0,
+        'action' => isset($result['action']) ? $result['action'] : '',
+        'errors' => isset($result['error-codes']) ? $result['error-codes'] : array()
+    );
+}
+
+
+/****** ฟังก์ชั่น Session timeout แบบตั้งค่าได้ *******/
+
+// สร้างหน้า admin menu
+add_action('admin_menu', 'dga_session_timeout_menu');
+function dga_session_timeout_menu() {
+    add_menu_page(
+        'Session Timeout Settings',
+        'Session Timeout',
+        'manage_options',
+        'dga-session-timeout',
+        'dga_session_timeout_page',
+        'dashicons-clock',
+        90
+    );
+}
+
+// หน้า admin settings
+function dga_session_timeout_page() {
+    ?>
+    <div class="wrap">
+        <h1>Session Timeout Settings</h1>
+        <form id="dga-timeout-form">
+            <table class="form-table">
+                <tr>
+                    <th scope="row">
+                        <label for="dga_timeout_minutes">Timeout Duration</label>
+                    </th>
+                    <td>
+                        <input type="number" 
+                               id="dga_timeout_minutes" 
+                               name="dga_timeout_minutes" 
+                               value="<?php echo esc_attr(get_option('dga_timeout_minutes', 30)); ?>" 
+                               min="1" 
+                               max="1440" 
+                               required>
+                        <span class="description">Minutes (1-1440)</span>
+                    </td>
+                </tr>
+                <tr>
+                    <th scope="row">
+                        <label for="dga_timeout_enabled">Enable Auto Logout</label>
+                    </th>
+                    <td>
+                        <input type="checkbox" 
+                               id="dga_timeout_enabled" 
+                               name="dga_timeout_enabled" 
+                               value="1" 
+                               <?php checked(get_option('dga_timeout_enabled', 0), 1); ?>>
+                        <span class="description">Enable automatic logout after timeout</span>
+                    </td>
+                </tr>
+                <tr>
+                    <th scope="row">
+                        <label for="dga_timeout_warning">Warning Time</label>
+                    </th>
+                    <td>
+                        <input type="number" 
+                               id="dga_timeout_warning" 
+                               name="dga_timeout_warning" 
+                               value="<?php echo esc_attr(get_option('dga_timeout_warning', 5)); ?>" 
+                               min="1" 
+                               max="60" 
+                               required>
+                        <span class="description">Minutes before timeout to show warning</span>
+                    </td>
+                </tr>
+            </table>
+            <?php wp_nonce_field('dga_timeout_nonce', 'dga_timeout_nonce_field'); ?>
+            <p class="submit">
+                <button type="submit" class="button-primary">Save Settings</button>
+                <span id="dga-timeout-message" class="notice" style="display:none;"></span>
+            </p>
+        </form>
+    </div>
+    <?php
+}
+
+// AJAX handler สำหรับบันทึกการตั้งค่า
+add_action('wp_ajax_dga_save_timeout_settings', 'dga_save_timeout_settings');
+function dga_save_timeout_settings() {
+    // ตรวจสอบ nonce
+    if (!wp_verify_nonce($_POST['nonce'], 'dga_timeout_nonce')) {
+        wp_die('Security check failed');
+    }
+    
+    // ตรวจสอบสิทธิ์
+    if (!current_user_can('manage_options')) {
+        wp_die('Unauthorized user');
+    }
+    
+    // บันทึกการตั้งค่า
+    update_option('dga_timeout_minutes', intval($_POST['timeout_minutes']));
+    update_option('dga_timeout_enabled', intval($_POST['timeout_enabled']));
+    update_option('dga_timeout_warning', intval($_POST['timeout_warning']));
+    
+    wp_send_json_success('Settings saved successfully');
+}
+
+// AJAX handler สำหรับการ logout
+add_action('wp_ajax_dga_session_logout', 'dga_session_logout');
+function dga_session_logout() {
+    // ตรวจสอบ nonce
+    if (!wp_verify_nonce($_POST['nonce'], 'dga_timeout_logout_nonce')) {
+        wp_die('Security check failed');
+    }
+    
+    wp_logout();
+    wp_send_json_success('Logged out successfully');
+}
+
+// โหลด scripts และ styles ในหน้า admin
+add_action('admin_enqueue_scripts', 'dga_timeout_enqueue_admin_scripts');
+function dga_timeout_enqueue_admin_scripts($hook) {
+    // โหลดเฉพาะในหน้า plugin settings
+    if ($hook == 'toplevel_page_dga-session-timeout') {
+        wp_enqueue_script(
+            'dga-timeout-admin', 
+            get_stylesheet_directory_uri() . '/js/dga-timeout.js', 
+            array('jquery'), 
+            '1.0.0', 
+            true
+        );
+        
+        wp_enqueue_style(
+            'dga-timeout-admin', 
+            get_stylesheet_directory_uri() . '/css/dga-timeout.css', 
+            array(), 
+            '1.0.0'
+        );
+        
+        // ส่งข้อมูลไปยัง JavaScript
+        wp_localize_script('dga-timeout-admin', 'dga_timeout_ajax', array(
+            'ajax_url' => admin_url('admin-ajax.php'),
+            'nonce' => wp_create_nonce('dga_timeout_nonce'),
+            'logout_nonce' => wp_create_nonce('dga_timeout_logout_nonce')
+        ));
+    }
+}
+
+// โหลด scripts สำหรับ frontend และ admin เพื่อ handle timeout
+add_action('wp_enqueue_scripts', 'dga_timeout_enqueue_scripts');
+add_action('admin_enqueue_scripts', 'dga_timeout_enqueue_scripts');
+function dga_timeout_enqueue_scripts() {
+    if (is_user_logged_in() && get_option('dga_timeout_enabled', 0)) {
+        wp_enqueue_script(
+            'dga-timeout-handler', 
+            get_stylesheet_directory_uri() . '/js/dga-timeout-handler.js', 
+            array('jquery'), 
+            '1.0.0', 
+            true
+        );
+        
+        // ส่งค่า timeout ไปยัง JavaScript
+        wp_localize_script('dga-timeout-handler', 'dga_timeout_config', array(
+            'ajax_url' => admin_url('admin-ajax.php'),
+            'logout_nonce' => wp_create_nonce('dga_timeout_logout_nonce'),
+            'timeout_minutes' => get_option('dga_timeout_minutes', 30),
+            'warning_minutes' => get_option('dga_timeout_warning', 5),
+            'is_admin' => is_admin() ? 'yes' : 'no'
+        ));
+    }
+}
+
+// Update user last activity
+add_action('init', 'dga_update_user_activity');
+function dga_update_user_activity() {
+    if (is_user_logged_in()) {
+        update_user_meta(get_current_user_id(), 'dga_last_activity', time());
+    }
+}
+
+// AJAX handler สำหรับอัปเดต activity
+add_action('wp_ajax_dga_update_activity', 'dga_ajax_update_activity');
+function dga_ajax_update_activity() {
+    if (is_user_logged_in()) {
+        update_user_meta(get_current_user_id(), 'dga_last_activity', time());
+        wp_send_json_success();
+    }
+    wp_die();
+}
+
+
+/**** ฟังก์ชั่น อภิธานศัพท์ *******/
+
+/**
+ * DGA Glossary Shortcode Function
+ * 
+ * Usage: [dga_glossary post_types="ckan,egp,news"]
+ */
+
+// Register shortcode
+add_shortcode('dga_glossary', 'dga_glossary_shortcode');
+
+function dga_glossary_shortcode($atts) {
+    // Default attributes
+    $atts = shortcode_atts(array(
+        'post_types' => 'ckan,egp,news,mpeople,article,pha,dgallery'
+    ), $atts);
+    
+    // Create nonce for security
+    $nonce = wp_create_nonce('dga_glossary_nonce');
+    
+    // Check if current user is administrator
+    $is_admin = current_user_can('administrator');
+    
+    // Enqueue scripts and styles
+    wp_enqueue_style('dga-glossary', get_stylesheet_directory_uri() . '/css/dga-glossary.css', array(), '1.0.0');
+    wp_enqueue_script('dga-glossary', get_stylesheet_directory_uri() . '/js/dga-glossary.js', array('jquery'), '1.0.0', true);
+    
+    // Pass data to JavaScript
+    wp_localize_script('dga-glossary', 'dga_glossary_ajax', array(
+        'ajax_url' => admin_url('admin-ajax.php'),
+        'nonce' => $nonce,
+        'post_types' => $atts['post_types'],
+        'is_admin' => $is_admin
+    ));
+    
+    ob_start();
+    ?>
+    <div id="dga-glossary-container" data-is-admin="<?php echo $is_admin ? 'true' : 'false'; ?>">
+        <!-- Filter Section -->
+        <div class="dga-glossary-filters">
+            <div class="filter-row">
+                <div class="search-container">
+                    <input type="text" id="dga-search-input" placeholder="ค้นหาคำศัพท์..." />
+                    <button id="dga-clear-search" class="btn-clear">ล้างค่า</button>
+                </div>
+                
+                <!-- Selected Letter Display -->
+                <div class="selected-letter-display">
+                    <div class="selected-letter-box">
+                        <span id="selected-letter-text">-</span>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="filter-row alphabet-filters">
+                <div class="alphabet-group thai-alphabet">
+                    <span class="alphabet-label">ไทย:</span>
+                    <?php 
+                    $thai_chars = array('ก','ข','ค','ฆ','ง','จ','ฉ','ช','ซ','ฌ','ญ','ฎ','ฏ','ฐ','ฑ','ฒ','ณ','ด','ต','ถ','ท','ธ','น','บ','ป','ผ','ฝ','พ','ฟ','ภ','ม','ย','ร','ล','ว','ศ','ษ','ส','ห','ฬ','อ','ฮ');
+                    foreach($thai_chars as $char): ?>
+                        <button class="alphabet-filter" data-char="<?php echo $char; ?>" data-type="thai"><?php echo $char; ?></button>
+                    <?php endforeach; ?>
+                </div>
+                
+                <div class="alphabet-group english-alphabet">
+                    <span class="alphabet-label">English:</span>
+                    <?php 
+                    foreach(range('A', 'Z') as $char): ?>
+                        <button class="alphabet-filter" data-char="<?php echo $char; ?>" data-type="english"><?php echo $char; ?></button>
+                    <?php endforeach; ?>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Table Section -->
+        <div class="dga-glossary-table-container">
+            <table id="dga-glossary-table">
+                <thead>
+                    <tr>
+                        <th>คำศัพท์ (ไทย)</th>
+                        <th>คำศัพท์ (English)</th>
+                        <th>คำอธิบาย</th>
+                        <th>ที่มา</th>
+                        <th>URL</th>
+                    </tr>
+                </thead>
+                <tbody id="dga-glossary-tbody">
+                    <!-- Loading skeleton will be shown here -->
+                    <tr class="skeleton-row">
+                        <td colspan="5">
+                            <div class="skeleton-loader">กำลังโหลดข้อมูล...</div>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+        
+        <!-- Pagination Section -->
+        <div id="dga-glossary-pagination" class="pagination-container"></div>
+    </div>
+    <?php
+    return ob_get_clean();
+}
+
+// AJAX Handler for fetching glossary data
+add_action('wp_ajax_dga_fetch_glossary', 'dga_fetch_glossary_data');
+add_action('wp_ajax_nopriv_dga_fetch_glossary', 'dga_fetch_glossary_data');
+
+function dga_fetch_glossary_data() {
+    // Check if request is AJAX
+    if (!defined('DOING_AJAX') || !DOING_AJAX) {
+        wp_die();
+    }
+    
+    // Verify nonce
+    if (!isset($_POST['nonce']) || !wp_verify_nonce($_POST['nonce'], 'dga_glossary_nonce')) {
+        wp_send_json_error(array('message' => 'Security check failed'));
+        wp_die();
+    }
+    
+    $page = isset($_POST['page']) ? intval($_POST['page']) : 1;
+    $search = isset($_POST['search']) ? sanitize_text_field($_POST['search']) : '';
+    $letter = isset($_POST['letter']) ? sanitize_text_field($_POST['letter']) : '';
+    $post_types = isset($_POST['post_types']) ? explode(',', sanitize_text_field($_POST['post_types'])) : array();
+    
+    // Trim whitespace from post types
+    $post_types = array_map('trim', $post_types);
+    
+    $per_page = 10;
+    $offset = ($page - 1) * $per_page;
+    
+    // Build query arguments
+    $args = array(
+        'post_type' => $post_types,
+        'posts_per_page' => $per_page,
+        'offset' => $offset,
+        'post_status' => 'publish',
+        'orderby' => 'title',
+        'order' => 'ASC'
+    );
+    
+    // Add search query if provided
+    if (!empty($search)) {
+        $args['s'] = $search;
+        
+        // Also search in meta fields
+        $args['meta_query'] = array(
+            'relation' => 'OR',
+            array(
+                'key' => 'at_content',
+                'value' => $search,
+                'compare' => 'LIKE'
+            ),
+            array(
+                'key' => 'at_thai',
+                'value' => $search,
+                'compare' => 'LIKE'
+            ),
+            array(
+                'key' => 'at_eng',
+                'value' => $search,
+                'compare' => 'LIKE'
+            )
+        );
+    }
+    
+    // Add letter filter if provided
+    if (!empty($letter)) {
+        add_filter('posts_where', function($where) use ($letter) {
+            global $wpdb;
+            $where .= " AND {$wpdb->posts}.post_title LIKE '{$letter}%'";
+            return $where;
+        });
+    }
+    
+    $query = new WP_Query($args);
+    
+    $results = array();
+    
+    if ($query->have_posts()) {
+        while ($query->have_posts()) {
+            $query->the_post();
+            $post_id = get_the_ID();
+            
+            // Get custom fields
+            $at_thai = get_post_meta($post_id, 'at_thai', true);
+            $at_eng = get_post_meta($post_id, 'at_eng', true);
+            $at_content = get_post_meta($post_id, 'at_content', true);
+            
+            // Limit content to 200 characters and strip HTML
+            if (!empty($at_content)) {
+                // Strip HTML tags and decode entities
+                $at_content = wp_strip_all_tags($at_content);
+                $at_content = html_entity_decode($at_content, ENT_QUOTES, 'UTF-8');
+                $at_content = mb_substr($at_content, 0, 200, 'UTF-8');
+                if (mb_strlen($at_content, 'UTF-8') >= 200) {
+                    $at_content .= '...';
+                }
+            }
+            
+            // Get all taxonomies and terms
+            $taxonomies = get_post_taxonomies($post_id);
+            $terms = array();
+            
+            foreach ($taxonomies as $taxonomy) {
+                $post_terms = get_the_terms($post_id, $taxonomy);
+                if ($post_terms && !is_wp_error($post_terms)) {
+                    foreach ($post_terms as $term) {
+                        $terms[] = $term->name;
+                    }
+                }
+            }
+            
+            $results[] = array(
+                'id' => $post_id,
+                'thai' => $at_thai,
+                'english' => $at_eng,
+                'content' => $at_content,
+                'source' => implode(', ', $terms),
+                'url' => get_permalink()
+            );
+        }
+    }
+    
+    // Remove letter filter
+    if (!empty($letter)) {
+        remove_all_filters('posts_where');
+    }
+    
+    // Get total posts for pagination
+    $total_args = $args;
+    unset($total_args['posts_per_page']);
+    unset($total_args['offset']);
+    $total_query = new WP_Query($total_args);
+    $total_posts = $total_query->found_posts;
+    $total_pages = ceil($total_posts / $per_page);
+    
+    wp_reset_postdata();
+    
+    wp_send_json(array(
+        'success' => true,
+        'data' => $results,
+        'pagination' => array(
+            'current_page' => $page,
+            'total_pages' => $total_pages,
+            'total_posts' => $total_posts
+        )
+    ));
+}
+
+// AJAX Handler for updating glossary terms
+add_action('wp_ajax_dga_update_glossary_term', 'dga_update_glossary_term');
+
+function dga_update_glossary_term() {
+    // Verify nonce
+    if (!wp_verify_nonce($_POST['nonce'], 'dga_glossary_nonce')) {
+        wp_send_json_error(array('message' => 'Security check failed'));
+        wp_die();
+    }
+    
+    // Check if user is administrator
+    if (!current_user_can('administrator')) {
+        wp_send_json(array(
+            'success' => false,
+            'message' => 'คุณไม่มีสิทธิ์ในการแก้ไขข้อมูล'
+        ));
+        wp_die();
+    }
+    
+    $post_id = intval($_POST['post_id']);
+    $field = sanitize_text_field($_POST['field']);
+    $value = sanitize_text_field($_POST['value']);
+    
+    // Update the custom field
+    if ($field === 'thai' || $field === 'english') {
+        $meta_key = $field === 'thai' ? 'at_thai' : 'at_eng';
+        update_post_meta($post_id, $meta_key, $value);
+        
+        wp_send_json(array(
+            'success' => true,
+            'message' => 'บันทึกข้อมูลสำเร็จ'
+        ));
+    } else {
+        wp_send_json(array(
+            'success' => false,
+            'message' => 'ไม่สามารถแก้ไขฟิลด์นี้ได้'
+        ));
+    }
+}
+
+
+/**** ฟังก์ชั่น FAQs ********/
+
+// สร้าง Custom Post Type สำหรับ FAQ
+function dga_create_faq_post_type() {
+    $args = array(
+        'labels' => array(
+            'name' => 'FAQs',
+            'singular_name' => 'FAQ',
+            'add_new' => 'เพิ่ม FAQ ใหม่',
+            'add_new_item' => 'เพิ่ม FAQ ใหม่',
+            'edit_item' => 'แก้ไข FAQ',
+            'new_item' => 'FAQ ใหม่',
+            'view_item' => 'ดู FAQ',
+            'search_items' => 'ค้นหา FAQ',
+            'not_found' => 'ไม่พบ FAQ',
+            'not_found_in_trash' => 'ไม่พบ FAQ ในถังขยะ'
+        ),
+        'public' => true,
+        'has_archive' => true,
+        'rewrite' => array('slug' => 'faq'),
+        'supports' => array('title', 'custom-fields'),
+        'show_in_rest' => true,
+        'menu_icon' => 'dashicons-editor-help'
+    );
+    
+    register_post_type('faq', $args);
+}
+add_action('init', 'dga_create_faq_post_type');
+
+// ลงทะเบียน Shortcode
+function dga_faqs_shortcode($atts) {
+    $atts = shortcode_atts(array(
+        'per_page' => 20
+    ), $atts);
+    
+    ob_start();
+    ?>
+    <div id="dga-faqs-container" data-per-page="<?php echo esc_attr($atts['per_page']); ?>">
+        <!-- Search Box -->
+        <div class="dga-faqs-search">
+            <input type="text" id="dga-faqs-search-input" placeholder="ค้นหาคำถาม...">
+            <button id="dga-faqs-search-btn">
+                <span class="dashicons dashicons-search"></span>
+            </button>
+        </div>
+        
+        <!-- FAQs List -->
+        <div id="dga-faqs-list">
+            <!-- FAQs จะถูกโหลดด้วย AJAX -->
+        </div>
+        
+        <!-- Pagination -->
+        <div id="dga-faqs-pagination">
+            <!-- Pagination จะถูกสร้างด้วย JavaScript -->
+        </div>
+    </div>
+    
+    <!-- Modal Popup -->
+    <div id="dga-faq-modal" class="dga-modal">
+        <div class="dga-modal-content">
+            <span class="dga-modal-close">&times;</span>
+            <h3>เพิ่มคำถามใหม่</h3>
+            <form id="dga-faqs-modal-form">
+                <div class="dga-form-group">
+                    <label for="dga-modal-question">คำถาม</label>
+                    <input type="text" id="dga-modal-question" placeholder="กรอกคำถามของคุณ" required>
+                </div>
+                <div class="dga-form-group">
+                    <label for="dga-modal-answer">คำตอบ</label>
+                    <textarea id="dga-modal-answer" placeholder="กรอกคำตอบของคุณ" rows="5" required></textarea>
+                </div>
+                <div class="dga-modal-buttons">
+                    <button type="submit" class="dga-btn-primary">เพิ่มคำถาม</button>
+                    <button type="button" class="dga-btn-secondary dga-modal-cancel">ยกเลิก</button>
+                </div>
+            </form>
+        </div>
+    </div>
+    
+    <!-- Edit Modal Popup -->
+    <div id="dga-faq-edit-modal" class="dga-modal">
+        <div class="dga-modal-content">
+            <span class="dga-modal-close">&times;</span>
+            <h3>แก้ไขคำถาม</h3>
+            <form id="dga-faqs-edit-form">
+                <input type="hidden" id="dga-edit-faq-id">
+                <div class="dga-form-group">
+                    <label for="dga-edit-question">คำถาม</label>
+                    <input type="text" id="dga-edit-question" placeholder="กรอกคำถามของคุณ" required>
+                </div>
+                <div class="dga-form-group">
+                    <label for="dga-edit-answer">คำตอบ</label>
+                    <textarea id="dga-edit-answer" placeholder="กรอกคำตอบของคุณ" rows="5" required></textarea>
+                </div>
+                <div class="dga-modal-buttons">
+                    <button type="submit" class="dga-btn-primary">บันทึกการแก้ไข</button>
+                    <button type="button" class="dga-btn-secondary dga-modal-cancel">ยกเลิก</button>
+                </div>
+            </form>
+        </div>
+    </div>
+    
+    <!-- Delete Confirmation Dialog -->
+    <div id="dga-delete-confirm" class="dga-modal">
+        <div class="dga-modal-content dga-confirm-dialog">
+            <div class="dga-confirm-icon">
+                <span class="dashicons dashicons-warning"></span>
+            </div>
+            <h3>ยืนยันการลบคำถาม</h3>
+            <p>คุณต้องการลบคำถามนี้ใช่หรือไม่?</p>
+            <div class="dga-confirm-details">
+                <strong>คำถาม:</strong> <span id="dga-delete-question-text"></span>
+            </div>
+            <div class="dga-modal-buttons">
+                <button type="button" class="dga-btn-danger" id="dga-confirm-delete">ลบคำถาม</button>
+                <button type="button" class="dga-btn-secondary dga-modal-cancel">ยกเลิก</button>
+            </div>
+        </div>
+    </div>
+    <?php
+    return ob_get_clean();
+}
+add_shortcode('dga_faqs', 'dga_faqs_shortcode');
+
+// Shortcode สำหรับปุ่มเพิ่มคำถาม
+function dga_faq_add_button_shortcode($atts) {
+    $atts = shortcode_atts(array(
+        'text' => 'เพิ่มคำถาม',
+        'class' => '',
+        'style' => ''
+    ), $atts);
+    
+    $button_class = 'dga-add-faq-btn ' . esc_attr($atts['class']);
+    $button_style = !empty($atts['style']) ? 'style="' . esc_attr($atts['style']) . '"' : '';
+    
+    return sprintf(
+        '<button class="%s" %s>%s</button>',
+        $button_class,
+        $button_style,
+        esc_html($atts['text'])
+    );
+}
+add_shortcode('dga-faq-add', 'dga_faq_add_button_shortcode');
+
+// Enqueue Scripts และ Styles
+function dga_faqs_enqueue_scripts() {
+    global $post;
+    
+    if (is_a($post, 'WP_Post') && (has_shortcode($post->post_content, 'dga_faqs') || has_shortcode($post->post_content, 'dga-faq-add'))) {
+        wp_enqueue_style('dga-faqs-style', get_stylesheet_directory_uri() . '/css/dga-faqs.css', array(), '1.0.0');
+        wp_enqueue_script('dga-faqs-script', get_stylesheet_directory_uri() . '/js/dga-faqs.js', array('jquery'), '1.0.0', true);
+        
+        // ใช้ helper function ตรวจสอบ admin
+        $is_admin = dga_is_user_admin();
+        
+        wp_localize_script('dga-faqs-script', 'dga_faqs_ajax', array(
+            'ajax_url' => admin_url('admin-ajax.php'),
+            'nonce' => wp_create_nonce('dga_faqs_nonce'),
+            'is_admin' => $is_admin,
+            'user_logged_in' => is_user_logged_in(),
+            'debug' => array(
+                'capabilities' => is_user_logged_in() ? $current_user->allcaps : array(),
+                'roles' => is_user_logged_in() ? $current_user->roles : array()
+            )
+        ));
+    }
+}
+add_action('wp_enqueue_scripts', 'dga_faqs_enqueue_scripts');
+
+// AJAX Handler - โหลด FAQs
+function dga_load_faqs() {
+    check_ajax_referer('dga_faqs_nonce', 'nonce');
+    
+    $page = isset($_POST['page']) ? intval($_POST['page']) : 1;
+    $per_page = isset($_POST['per_page']) ? intval($_POST['per_page']) : 20;
+    $search = isset($_POST['search']) ? sanitize_text_field($_POST['search']) : '';
+    
+    $args = array(
+        'post_type' => 'faq',
+        'posts_per_page' => $per_page,
+        'paged' => $page,
+        'post_status' => 'publish',
+        'orderby' => 'date',
+        'order' => 'DESC'
+    );
+    
+    if (!empty($search)) {
+        $args['s'] = $search;
+    }
+    
+    $query = new WP_Query($args);
+    $faqs = array();
+    
+    if ($query->have_posts()) {
+        while ($query->have_posts()) {
+            $query->the_post();
+            $post_id = get_the_ID();
+            
+            $faqs[] = array(
+                'id' => $post_id,
+                'question' => get_the_title(),
+                'answer' => get_post_meta($post_id, 'faq_details', true),
+                'likes' => intval(get_post_meta($post_id, 'faq_good', true)),
+                'user_liked' => dga_check_user_liked($post_id)
+            );
+        }
+    }
+    
+    wp_send_json_success(array(
+        'faqs' => $faqs,
+        'total_pages' => $query->max_num_pages,
+        'current_page' => $page
+    ));
+}
+add_action('wp_ajax_dga_load_faqs', 'dga_load_faqs');
+add_action('wp_ajax_nopriv_dga_load_faqs', 'dga_load_faqs');
+
+// AJAX Handler - เพิ่ม FAQ
+function dga_add_faq() {
+    check_ajax_referer('dga_faqs_nonce', 'nonce');
+    
+    $question = sanitize_text_field($_POST['question']);
+    $answer = sanitize_textarea_field($_POST['answer']);
+    
+    if (empty($question) || empty($answer)) {
+        wp_send_json_error('กรุณากรอกข้อมูลให้ครบถ้วน');
+    }
+    
+    $post_data = array(
+        'post_title' => $question,
+        'post_type' => 'faq',
+        'post_status' => 'publish'
+    );
+    
+    $post_id = wp_insert_post($post_data);
+    
+    if ($post_id) {
+        update_post_meta($post_id, 'faq_details', $answer);
+        update_post_meta($post_id, 'faq_good', 0);
+        
+        // อัพเดต slug ให้เป็น post ID
+        wp_update_post(array(
+            'ID' => $post_id,
+            'post_name' => $post_id
+        ));
+        
+        wp_send_json_success('เพิ่มคำถามสำเร็จ');
+    } else {
+        wp_send_json_error('เกิดข้อผิดพลาดในการเพิ่มคำถาม');
+    }
+}
+add_action('wp_ajax_dga_add_faq', 'dga_add_faq');
+add_action('wp_ajax_nopriv_dga_add_faq', 'dga_add_faq');
+
+// AJAX Handler - แก้ไข FAQ
+function dga_update_faq() {
+    check_ajax_referer('dga_faqs_nonce', 'nonce');
+    
+    // ตรวจสอบว่าเป็น Administrator
+    if (!is_user_logged_in() || !current_user_can('administrator')) {
+        wp_send_json_error('คุณไม่มีสิทธิ์ในการแก้ไขคำถาม');
+    }
+    
+    $faq_id = intval($_POST['faq_id']);
+    $question = sanitize_text_field($_POST['question']);
+    $answer = sanitize_textarea_field($_POST['answer']);
+    
+    if (empty($question) || empty($answer)) {
+        wp_send_json_error('กรุณากรอกข้อมูลให้ครบถ้วน');
+    }
+    
+    // อัพเดตคำถาม
+    $updated = wp_update_post(array(
+        'ID' => $faq_id,
+        'post_title' => $question
+    ));
+    
+    if ($updated) {
+        update_post_meta($faq_id, 'faq_details', $answer);
+        wp_send_json_success('แก้ไขคำถามสำเร็จ');
+    } else {
+        wp_send_json_error('เกิดข้อผิดพลาดในการแก้ไขคำถาม');
+    }
+}
+add_action('wp_ajax_dga_update_faq', 'dga_update_faq');
+add_action('wp_ajax_nopriv_dga_update_faq', 'dga_update_faq');
+
+// AJAX Handler - ลบ FAQ
+function dga_delete_faq() {
+    check_ajax_referer('dga_faqs_nonce', 'nonce');
+    
+    // ตรวจสอบว่าเป็น Administrator
+    if (!is_user_logged_in() || !current_user_can('administrator')) {
+        wp_send_json_error('คุณไม่มีสิทธิ์ในการลบคำถาม');
+    }
+    
+    $faq_id = intval($_POST['faq_id']);
+    
+    if (!$faq_id) {
+        wp_send_json_error('ไม่พบคำถามที่ต้องการลบ');
+    }
+    
+    $deleted = wp_trash_post($faq_id);
+    
+    if ($deleted) {
+        wp_send_json_success('ลบคำถามสำเร็จ');
+    } else {
+        wp_send_json_error('เกิดข้อผิดพลาดในการลบคำถาม');
+    }
+}
+add_action('wp_ajax_dga_delete_faq', 'dga_delete_faq');
+add_action('wp_ajax_nopriv_dga_delete_faq', 'dga_delete_faq');
+
+// AJAX Handler - Toggle Like
+function dga_toggle_like() {
+    check_ajax_referer('dga_faqs_nonce', 'nonce');
+    
+    $faq_id = intval($_POST['faq_id']);
+    
+    // ตรวจสอบว่าผู้ใช้ลงคะแนนวันนี้แล้วหรือยัง
+    if (dga_check_daily_limit($faq_id)) {
+        wp_send_json_error('คุณได้ลงคะแนนสำหรับคำถามนี้ในวันนี้แล้ว');
+    }
+    
+    $current_likes = intval(get_post_meta($faq_id, 'faq_good', true));
+    $user_liked = dga_check_user_liked($faq_id);
+    
+    if ($user_liked) {
+        // Unlike
+        $new_likes = $current_likes - 1;
+        dga_remove_user_like($faq_id);
+    } else {
+        // Like
+        $new_likes = $current_likes + 1;
+        dga_add_user_like($faq_id);
+    }
+    
+    update_post_meta($faq_id, 'faq_good', $new_likes);
+    
+    wp_send_json_success(array(
+        'likes' => $new_likes,
+        'user_liked' => !$user_liked
+    ));
+}
+add_action('wp_ajax_dga_toggle_like', 'dga_toggle_like');
+add_action('wp_ajax_nopriv_dga_toggle_like', 'dga_toggle_like');
+
+// Helper function to check if user is administrator
+function dga_is_user_admin() {
+    if (!is_user_logged_in()) {
+        return false;
+    }
+    
+    $current_user = wp_get_current_user();
+    
+    // Check multiple ways to ensure user is admin
+    if (current_user_can('manage_options')) {
+        return true;
+    }
+    
+    if (current_user_can('administrator')) {
+        return true;
+    }
+    
+    if (in_array('administrator', (array) $current_user->roles)) {
+        return true;
+    }
+    
+    // Check if user is Super Admin in multisite
+    if (is_multisite() && is_super_admin()) {
+        return true;
+    }
+    
+    return false;
+}
+function dga_check_user_liked($faq_id) {
+    $session_key = 'dga_faq_likes_' . dga_get_session_id();
+    $likes = get_transient($session_key);
+    
+    if (!is_array($likes)) {
+        $likes = array();
+    }
+    
+    return isset($likes[$faq_id]) && $likes[$faq_id];
+}
+
+function dga_add_user_like($faq_id) {
+    $session_key = 'dga_faq_likes_' . dga_get_session_id();
+    $likes = get_transient($session_key);
+    
+    if (!is_array($likes)) {
+        $likes = array();
+    }
+    
+    $likes[$faq_id] = true;
+    set_transient($session_key, $likes, DAY_IN_SECONDS);
+}
+
+function dga_remove_user_like($faq_id) {
+    $session_key = 'dga_faq_likes_' . dga_get_session_id();
+    $likes = get_transient($session_key);
+    
+    if (!is_array($likes)) {
+        $likes = array();
+    }
+    
+    unset($likes[$faq_id]);
+    set_transient($session_key, $likes, DAY_IN_SECONDS);
+}
+
+function dga_check_daily_limit($faq_id) {
+    $limit_key = 'dga_faq_daily_' . dga_get_session_id() . '_' . $faq_id;
+    $today = date('Y-m-d');
+    $last_action = get_transient($limit_key);
+    
+    if ($last_action === $today) {
+        return true;
+    }
+    
+    set_transient($limit_key, $today, DAY_IN_SECONDS);
+    return false;
+}
+
+function dga_get_session_id() {
+    if (!session_id()) {
+        session_start();
+    }
+    
+    if (!isset($_SESSION['dga_faq_session'])) {
+        $_SESSION['dga_faq_session'] = uniqid();
+    }
+    
+    return $_SESSION['dga_faq_session'];
+}
+
+
+/***** ฟังก์ชั่น CARD ITEM ข่าวสารหน้าแรก ********/
+
+
+// Enqueue styles and scripts
+function dga_news_enqueue_assets() {
+    $theme_version = wp_get_theme()->get('Version');
+    
+    // Check for child theme CSS
+    if (is_child_theme()) {
+        $child_style_path = get_stylesheet_directory() . '/css/dga-news-loop.css';
+        $child_style_uri = get_stylesheet_directory_uri() . '/css/dga-news-loop.css';
+        
+        if (file_exists($child_style_path)) {
+            wp_enqueue_style('dga-news-style', $child_style_uri, array(), $theme_version);
+        } else {
+            wp_enqueue_style('dga-news-style', get_template_directory_uri() . '/css/dga-news-loop.css', array(), $theme_version);
+        }
+        
+        // Check for child theme JS
+        $child_script_path = get_stylesheet_directory() . '/js/dga-news-loop.js';
+        $child_script_uri = get_stylesheet_directory_uri() . '/js/dga-news-loop.js';
+        
+        if (file_exists($child_script_path)) {
+            wp_enqueue_script('dga-news-script', $child_script_uri, array('jquery'), $theme_version, true);
+        } else {
+            wp_enqueue_script('dga-news-script', get_template_directory_uri() . '/js/dga-news-loop.js', array('jquery'), $theme_version, true);
+        }
+    } else {
+        wp_enqueue_style('dga-news-style', get_template_directory_uri() . '/css/dga-news-loop.css', array(), $theme_version);
+        wp_enqueue_script('dga-news-script', get_template_directory_uri() . '/js/dga-news-loop.js', array('jquery'), $theme_version, true);
+    }
+    
+    // Setup AJAX 
+    wp_localize_script('dga-news-script', 'dga_news_ajax', array(
+        'ajax_url' => admin_url('admin-ajax.php'),
+        'nonce' => wp_create_nonce('dga-news-nonce')
+    ));
+}
+add_action('wp_enqueue_scripts', 'dga_news_enqueue_assets');
+
+// News post loop shortcode
+function dga_news_loops($atts) {
+    // Parse attributes
+    $atts = shortcode_atts(array(
+        'posts_per_page' => 8,
+        'post_type' => 'article',
+        'taxonomy' => '',
+        'term' => 'stdnews',
+    ), $atts);
+    
+    // Build tax query if term is provided
+    $tax_query = array();
+    if (!empty($atts['term'])) {
+        $taxonomy = !empty($atts['taxonomy']) ? sanitize_text_field($atts['taxonomy']) : 'category';
+        $tax_query[] = array(
+            'taxonomy' => $taxonomy,
+            'field' => 'slug',
+            'terms' => $atts['term']
+        );
+    }
+    
+    // Setup query arguments
+    $query_args = array(
+        'post_type' => $atts['post_type'],
+        'posts_per_page' => $atts['posts_per_page'],
+        'post_status' => 'publish',
+        'orderby' => 'date',
+        'order' => 'DESC'
+    );
+    
+    // Add tax_query if we have term
+    if (!empty($tax_query)) {
+        $query_args['tax_query'] = $tax_query;
+    }
+    
+    $query = new WP_Query($query_args);
+    
+    ob_start();
+    
+    if ($query->have_posts()) : ?>
+        <div class="dga-news-container" data-post-type="<?php echo esc_attr($atts['post_type']); ?>" data-taxonomy="<?php echo esc_attr($taxonomy); ?>" data-term="<?php echo esc_attr($atts['term']); ?>" data-posts-per-page="<?php echo esc_attr($atts['posts_per_page']); ?>">
+            <div class="dga-news-carousel">
+                <?php $count = 0; while ($query->have_posts()) : $query->the_post(); $count++; ?>
+                    <article class="dga-news-item <?php echo ($count === 1) ? 'dga-news-active' : ''; ?>">
+                        <a href="<?php the_permalink(); ?>" class="dga-news-link">
+                            <div class="dga-news-image">
+                                <?php if (has_post_thumbnail()) : ?>
+                                    <?php the_post_thumbnail('medium', array('class' => 'dga-news-thumbnail')); ?>
+                                <?php else : ?>
+                                    <div class="dga-news-no-image"></div>
+                                <?php endif; ?>
+                                <?php
+                                    // Get all taxonomies for this post
+                                    $post_taxonomies = get_object_taxonomies(get_post_type());
+                                    $first_term = null;
+
+                                    // Loop through taxonomies to find the first term
+                                    foreach ($post_taxonomies as $taxonomy) {
+                                        $terms = get_the_terms(get_the_ID(), $taxonomy);
+                                        if (!empty($terms) && !is_wp_error($terms)) {
+                                            $first_term = $terms[0];
+                                            break; // ใช้ term แรกที่เจอ
+                                        }
+                                    }
+
+                                    // Display the term name if found
+                                    if ($first_term) : ?>
+                                        <span class="dga-news-badge"><?php echo esc_html($first_term->name); ?></span>
+                                    <?php endif; ?>
+                            </div>
+                            <div class="dga-news-content">
+                                <h3 class="dga-news-title"><?php the_title(); ?></h3>
+                                <div class="dga-news-meta">
+                                    <span class="dga-news-time"><?php echo human_time_diff(get_the_time('U'), current_time('timestamp')); ?> ที่แล้ว</span>
+                                    <span class="dga-news-separator">•</span>
+                                    <span class="dga-news-readmore">อ่านต่อ</span>
+                                </div>
+                            </div>
+                        </a>
+                    </article>
+                <?php endwhile; ?>
+            </div>
+        </div>
+    <?php else: ?>
+        <div class="dga-news-empty">ไม่พบโพสต์ที่เกี่ยวข้อง</div>
+    <?php endif;
+    
+    wp_reset_postdata();
+    
+    return ob_get_clean();
+}
+add_shortcode('dga-news-postloop', 'dga_news_loops');
+
+// Navigation shortcode
+function dga_navigator($atts) {
+    // Parse attributes
+    $atts = shortcode_atts(array(
+        'target' => '.dga-news-container', // CSS selector of the target carousel
+    ), $atts);
+    
+    ob_start();
+    ?>
+    <div class="dga-news-navigator" data-target="<?php echo esc_attr($atts['target']); ?>">
+        <button type="button" class="dga-nav-prev" aria-label="ก่อนหน้า">
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="15 18 9 12 15 6"></polyline>
+            </svg>
+        </button>
+        <button type="button" class="dga-nav-next" aria-label="ถัดไป">
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="9 18 15 12 9 6"></polyline>
+            </svg>
+        </button>
+    </div>
+    <?php
+    
+    return ob_get_clean();
+}
+add_shortcode('dga-news-navigator', 'dga_navigator');
+
+// AJAX function to load more posts
+function dga_load_more_posts() {
+    check_ajax_referer('dga-news-nonce', 'nonce');
+    
+    $post_type = isset($_POST['post_type']) ? sanitize_text_field($_POST['post_type']) : 'article';
+    $taxonomy = isset($_POST['taxonomy']) ? sanitize_text_field($_POST['taxonomy']) : 'category';
+    $term = isset($_POST['term']) ? sanitize_text_field($_POST['term']) : 'stdnews';
+    $posts_per_page = isset($_POST['posts_per_page']) ? intval($_POST['posts_per_page']) : 8;
+    $offset = isset($_POST['offset']) ? intval($_POST['offset']) : 0;
+    
+    // Build tax query if term is provided
+    $tax_query = array();
+    if (!empty($term)) {
+        $tax_query[] = array(
+            'taxonomy' => $taxonomy,
+            'field' => 'slug',
+            'terms' => $term
+        );
+    }
+    
+    // Setup query arguments
+    $query_args = array(
+        'post_type' => $post_type,
+        'posts_per_page' => $posts_per_page,
+        'offset' => $offset,
+        'post_status' => 'publish',
+        'orderby' => 'date',
+        'order' => 'DESC'
+    );
+    
+    // Add tax_query if we have term
+    if (!empty($tax_query)) {
+        $query_args['tax_query'] = $tax_query;
+    }
+    
+    $query = new WP_Query($query_args);
+    $posts_html = '';
+    
+    if ($query->have_posts()) {
+        while ($query->have_posts()) {
+            $query->the_post();
+            
+            ob_start();
+            ?>
+            <article class="dga-news-item">
+                <a href="<?php the_permalink(); ?>" class="dga-news-link">
+                    <div class="dga-news-image">
+                        <?php if (has_post_thumbnail()) : ?>
+                            <?php the_post_thumbnail('medium', array('class' => 'dga-news-thumbnail')); ?>
+                        <?php else : ?>
+                            <div class="dga-news-no-image"></div>
+                        <?php endif; ?>
+                        <?php
+                            // Get all taxonomies for this post
+                            $post_taxonomies = get_object_taxonomies(get_post_type());
+                            $first_term = null;
+
+                            // Loop through taxonomies to find the first term
+                            foreach ($post_taxonomies as $taxonomy) {
+                                $terms = get_the_terms(get_the_ID(), $taxonomy);
+                                if (!empty($terms) && !is_wp_error($terms)) {
+                                    $first_term = $terms[0];
+                                    break; // ใช้ term แรกที่เจอ
+                                }
+                            }
+
+                            // Display the term name if found
+                            if ($first_term) : ?>
+                                <span class="dga-news-badge"><?php echo esc_html($first_term->name); ?></span>
+                            <?php endif; ?>
+                    </div>
+                    <div class="dga-news-content">
+                        <h3 class="dga-news-title"><?php the_title(); ?></h3>
+                        <div class="dga-news-meta">
+                            <span class="dga-news-time"><?php echo human_time_diff(get_the_time('U'), current_time('timestamp')); ?> ที่แล้ว</span>
+                            <span class="dga-news-separator">•</span>
+                            <span class="dga-news-readmore">อ่านต่อ</span>
+                        </div>
+                    </div>
+                </a>
+            </article>
+            <?php
+            $posts_html .= ob_get_clean();
+        }
+        
+        wp_reset_postdata();
+        
+        wp_send_json_success(array(
+            'posts' => $posts_html,
+            'has_more' => $query->max_num_pages > ($offset / $posts_per_page) + 1
+        ));
+    } else {
+        wp_send_json_error(array('message' => 'ไม่พบโพสต์เพิ่มเติม'));
+    }
+    
+    wp_die();
+}
+add_action('wp_ajax_dga_load_more_posts', 'dga_load_more_posts');
+add_action('wp_ajax_nopriv_dga_load_more_posts', 'dga_load_more_posts');
+
+
+
+/**** ฟังก์ชั่น PDF PREVIEW *********/
+
+
+class PDF_Viewer_Shortcode {
+    
+    private static $instance = null;
+    private $assets_loaded = false;
+    
+    public static function get_instance() {
+        return self::$instance ?: self::$instance = new self();
+    }
+    
+    public function __construct() {
+        add_shortcode('pdf_viewer', [$this, 'render_shortcode']);
+        add_action('wp_enqueue_scripts', [$this, 'conditional_enqueue']);
+        add_action('elementor/frontend/after_enqueue_scripts', [$this, 'elementor_enqueue']);
+    }
+    
+    /**
+     * Render PDF viewer shortcode
+     */
+    public function render_shortcode($atts) {
+        $atts = shortcode_atts([
+            'url' => '',
+            'width' => '100%',
+            'height' => '600px',
+            'class' => '',
+            'download' => 'true',
+            'fullscreen' => 'true'
+        ], $atts, 'pdf_viewer');
+        
+        // Security: Sanitize inputs
+        $url = sanitize_url($atts['url']);
+        $width = sanitize_text_field($atts['width']);
+        $height = sanitize_text_field($atts['height']);
+        $class = sanitize_html_class($atts['class']);
+        $download = $atts['download'] === 'true';
+        $fullscreen = $atts['fullscreen'] === 'true';
+        
+        if (!$url) return '<p>PDF URL is required.</p>';
+        
+        // Validate URL format
+        if (!filter_var($url, FILTER_VALIDATE_URL) && !$this->is_relative_path($url)) {
+            return '<p>Invalid PDF URL provided.</p>';
+        }
+        
+        $this->load_assets();
+        
+        $unique_id = 'pdf-viewer-' . wp_rand(1000, 9999);
+        $wrapper_class = 'pdf-viewer-wrapper ' . $class;
+        
+        ob_start();
+        ?>
+        <div class="<?php echo esc_attr($wrapper_class); ?>" 
+             data-pdf-url="<?php echo esc_url($url); ?>"
+             data-width="<?php echo esc_attr($width); ?>"
+             data-height="<?php echo esc_attr($height); ?>"
+             data-download="<?php echo $download ? 'true' : 'false'; ?>"
+             data-fullscreen="<?php echo $fullscreen ? 'true' : 'false'; ?>">
+            
+            <div id="<?php echo esc_attr($unique_id); ?>" class="pdf-viewer-container">
+                <div class="pdf-loading">
+                    <span>Loading PDF...</span>
+                </div>
+                
+                <?php if ($fullscreen): ?>
+                <div class="pdf-header">
+                    <button class="pdf-fullscreen-btn" 
+                            type="button" 
+                            title="Toggle Fullscreen"
+                            aria-label="Toggle fullscreen mode">
+                        <span class="fullscreen-icon">⛶</span>
+                        <span class="fullscreen-text">Fullscreen</span>
+                    </button>
+                </div>
+                <?php endif; ?>
+                
+                <iframe class="pdf-iframe" 
+                        src="<?php echo esc_url($this->get_viewer_url($url, $download)); ?>"
+                        width="<?php echo esc_attr($width); ?>"
+                        height="<?php echo esc_attr($height); ?>"
+                        frameborder="0"
+                        title="PDF Viewer"
+                        allowfullscreen>
+                    <p>Your browser doesn't support PDF viewing. 
+                       <a href="<?php echo esc_url($url); ?>" target="_blank">Download PDF</a>
+                    </p>
+                </iframe>
+                
+                <?php if ($download): ?>
+                <div class="pdf-controls">
+                    <a href="<?php echo esc_url($url); ?>" 
+                       class="pdf-download-btn" 
+                       download 
+                       target="_blank">
+                        Download PDF
+                    </a>
+                </div>
+                <?php endif; ?>
+            </div>
+        </div>
+        <?php
+        return ob_get_clean();
+    }
+    
+    /**
+     * Generate viewer URL with fallback options
+     */
+    private function get_viewer_url($url, $download = true) {
+        // For external URLs, use Google Docs viewer as fallback
+        if (filter_var($url, FILTER_VALIDATE_URL)) {
+            return "https://docs.google.com/viewer?url=" . urlencode($url) . "&embedded=true";
+        }
+        
+        // For local files, serve directly
+        return $url . ($download ? '' : '#toolbar=0');
+    }
+    
+    /**
+     * Check if path is relative
+     */
+    private function is_relative_path($path) {
+        return strpos($path, '/') === 0 || strpos($path, './') === 0;
+    }
+    
+    /**
+     * Conditional asset loading
+     */
+    public function conditional_enqueue() {
+        global $post;
+        
+        if (!is_admin() && $post && has_shortcode($post->post_content, 'pdf_viewer')) {
+            $this->load_assets();
+        }
+    }
+    
+    /**
+     * Elementor compatibility
+     */
+    public function elementor_enqueue() {
+        if (class_exists('\Elementor\Plugin') && \Elementor\Plugin::$instance->editor->is_edit_mode()) {
+            $this->load_assets();
+        }
+    }
+    
+    /**
+     * Load CSS and JS assets
+     */
+    private function load_assets() {
+        if ($this->assets_loaded) return;
+        
+        $version = get_theme_mod('cache_bust', '1.0.0');
+        
+        // Determine asset path (theme vs plugin)
+        $css_url = get_stylesheet_directory_uri() . '/css/pdf-viewer.css';
+        $js_url = get_stylesheet_directory_uri() . '/js/pdf-viewer.js';
+        
+        // Fallback to plugin directory if in plugin
+        if (!file_exists(get_stylesheet_directory() . '/css/pdf-viewer.css')) {
+            $css_url = plugin_dir_url(__FILE__) . 'assets/css/pdf-viewer.css';
+            $js_url = plugin_dir_url(__FILE__) . 'assets/js/pdf-viewer.js';
+        }
+        
+        wp_enqueue_style('pdf-viewer-css', $css_url, [], $version);
+        wp_enqueue_script('pdf-viewer-js', $js_url, ['jquery'], $version, true);
+        
+        // Localize script
+        wp_localize_script('pdf-viewer-js', 'pdfViewerConfig', [
+            'ajax_url' => admin_url('admin-ajax.php'),
+            'nonce' => wp_create_nonce('pdf_viewer_nonce'),
+            'loading_text' => __('Loading PDF...', 'textdomain'),
+            'error_text' => __('Error loading PDF', 'textdomain')
+        ]);
+        
+        $this->assets_loaded = true;
+    }
+}
+
+// Initialize
+PDF_Viewer_Shortcode::get_instance();

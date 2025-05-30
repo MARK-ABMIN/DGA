@@ -180,7 +180,7 @@ class Utility {
 		$memory_limit = ini_get( 'memory_limit' );
 		if ($memory_limit != '')
 		{
-		    switch ( $memory_limit{strlen( $memory_limit ) - 1} )
+		    switch ( $memory_limit[strlen( $memory_limit ) - 1] )
 		    {
 		        case 'G':
 		            $memory_limit *= 1024;

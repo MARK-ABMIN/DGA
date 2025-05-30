@@ -1,0 +1,11 @@
+{
+    "name": "myproject/myproject",
+    "description": "My project",
+    "authors": [
+        {
+            "name": "My Name",
+            "email": "myname@example.com"
+        }
+    ],
+    "require": {}
+}
